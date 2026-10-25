@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   DadosMovimentacaoVeiculo,
   MovimentacaoVeiculoApiResponse,
@@ -35,7 +36,7 @@ async function lerResposta<T>(
 export async function buscarHistoricoMovimentacoes(
   idCiclo: number,
 ): Promise<DadosMovimentacaoVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}`,
     {
       method: "GET",
@@ -64,7 +65,7 @@ export async function registrarMovimentacaoVeiculo(
   idCiclo: number,
   dados: MovimentacaoVeiculoFormData,
 ): Promise<DadosMovimentacaoVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}`,
     {
       method: "POST",

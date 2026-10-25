@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useAuth } from "../context/AuthContext";
 import { buscarHistoricoVeiculo } from "../services/historicoVeiculoApi";
 import type {
   CicloHistorico,
@@ -29,6 +30,15 @@ function formatarData(
   }
 
   return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function formatarDataHora(
+  valor: string | null | undefined,
+): string {
+  if (!valor) return "—";
+  const data = formatarData(valor);
+  const horario = /[ T](\d{2}:\d{2}(?::\d{2})?)/.exec(valor);
+  return horario ? `${data} às ${horario[1]}` : data;
 }
 
 function formatarMoeda(
@@ -107,6 +117,8 @@ export function HistoricoCiclosModal({
   idVeiculo,
   aoFechar,
 }: HistoricoCiclosModalProps) {
+  const { pode } = useAuth();
+  const podeVerCustos = pode("custos.visualizar");
   const [historico, setHistorico] =
     useState<HistoricoVeiculo | null>(null);
 
@@ -307,11 +319,11 @@ export function HistoricoCiclosModal({
 
                             <div>
                               <span>
-                                Data de entrada
+                                Data e hora de entrada
                               </span>
 
                               <strong>
-                                {formatarData(
+                                {formatarDataHora(
                                   ciclo.data_entrada,
                                 )}
                               </strong>
@@ -355,9 +367,7 @@ export function HistoricoCiclosModal({
                               </span>
 
                               <strong>
-                                {obterValorEntrada(
-                                  ciclo,
-                                )}
+                                {podeVerCustos ? obterValorEntrada(ciclo) : "Acesso restrito"}
                               </strong>
                             </div>
 
@@ -377,9 +387,7 @@ export function HistoricoCiclosModal({
                               </span>
 
                               <strong>
-                                {formatarMoeda(
-                                  ciclo.despesas_realizadas,
-                                )}
+                                {podeVerCustos ? formatarMoeda(ciclo.despesas_realizadas) : "Acesso restrito"}
                               </strong>
                             </div>
 
@@ -389,9 +397,7 @@ export function HistoricoCiclosModal({
                               </span>
 
                               <strong>
-                                {formatarMoeda(
-                                  ciclo.despesas_previstas_pendentes,
-                                )}
+                                {podeVerCustos ? formatarMoeda(ciclo.despesas_previstas_pendentes) : "Acesso restrito"}
                               </strong>
                             </div>
 
@@ -401,9 +407,7 @@ export function HistoricoCiclosModal({
                               </span>
 
                               <strong>
-                                {formatarMoeda(
-                                  ciclo.custo_acumulado,
-                                )}
+                                {podeVerCustos ? formatarMoeda(ciclo.custo_acumulado) : "Acesso restrito"}
                               </strong>
                             </div>
 
@@ -413,9 +417,7 @@ export function HistoricoCiclosModal({
                               </span>
 
                               <strong>
-                                {formatarMoeda(
-                                  ciclo.custo_projetado,
-                                )}
+                                {podeVerCustos ? formatarMoeda(ciclo.custo_projetado) : "Acesso restrito"}
                               </strong>
                             </div>
                           </div>

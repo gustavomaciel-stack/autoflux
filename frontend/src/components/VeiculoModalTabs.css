@@ -1,0 +1,36 @@
+.vehicle-editor-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 16px 24px 0;
+  padding: 5px;
+  border: 1px solid #e3e9f2;
+  border-radius: 12px;
+  background: #f1f5fa;
+}
+.vehicle-editor-tab {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #536277;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vehicle-editor-tab.active {
+  border-color: #dce6f6;
+  background: #fff;
+  color: #1769f4;
+  box-shadow: 0 2px 5px rgb(22 44 75 / 8%);
+}
+.vehicle-editor-tab:hover:not(.active) { background: #e7edf5; }
+.vehicle-editor-tab:focus-visible { outline: 2px solid #1769f4; outline-offset: 2px; }
+.vehicle-edit-modal.has-repasse form { max-height: calc(100vh - 205px); }
+.vehicle-edit-modal > .repasse-patio-body { max-height: calc(100vh - 205px); }
+@media (max-width: 600px) {
+  .vehicle-editor-tabs { margin: 12px 16px 0; }
+  .vehicle-editor-tab { padding: 10px 7px; font-size: 13px; }
+}

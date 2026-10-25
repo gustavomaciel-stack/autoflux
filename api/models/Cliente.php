@@ -32,7 +32,8 @@ final class Cliente
                 estado,
                 observacoes,
                 data_cadastro,
-                data_atualizacao
+                data_atualizacao,
+                ativo
             FROM clientes
             ORDER BY nome_razao_social ASC
         ";
@@ -63,7 +64,8 @@ final class Cliente
                 estado,
                 observacoes,
                 data_cadastro,
-                data_atualizacao
+                data_atualizacao,
+                ativo
             FROM clientes
             WHERE id_cliente = :id_cliente
             LIMIT 1
@@ -143,7 +145,8 @@ final class Cliente
                 bairro,
                 cidade,
                 estado,
-                observacoes
+                observacoes,
+                ativo
             ) VALUES (
                 :tipo_pessoa,
                 :nome_razao_social,
@@ -159,7 +162,8 @@ final class Cliente
                 :bairro,
                 :cidade,
                 :estado,
-                :observacoes
+                :observacoes,
+                :ativo
             )
         ";
 
@@ -181,6 +185,7 @@ final class Cliente
             ':cidade' => $dados['cidade'] ?? null,
             ':estado' => $dados['estado'] ?? null,
             ':observacoes' => $dados['observacoes'] ?? null,
+            ':ativo' => $dados['ativo'] ?? 1,
         ]);
 
         return (int) $this->conexao->lastInsertId();
@@ -207,7 +212,8 @@ final class Cliente
                 bairro = :bairro,
                 cidade = :cidade,
                 estado = :estado,
-                observacoes = :observacoes
+                observacoes = :observacoes,
+                ativo = :ativo
             WHERE id_cliente = :id_cliente
         ";
 
@@ -230,7 +236,14 @@ final class Cliente
             ':cidade' => $dados['cidade'] ?? null,
             ':estado' => $dados['estado'] ?? null,
             ':observacoes' => $dados['observacoes'] ?? null,
+            ':ativo' => $dados['ativo'] ?? 1,
         ]);
+    }
+
+    public function alterarSituacao(int $idCliente, int $ativo): void
+    {
+        $consulta = $this->conexao->prepare('UPDATE clientes SET ativo = :ativo WHERE id_cliente = :id');
+        $consulta->execute(['ativo' => $ativo, 'id' => $idCliente]);
     }
 
     public function documentoJaCadastrado(

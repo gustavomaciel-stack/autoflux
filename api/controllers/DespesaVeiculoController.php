@@ -81,7 +81,7 @@ final class DespesaVeiculoController
              * Temporário no MVP1.
              * Depois será obtido do usuário autenticado.
              */
-            $idUsuarioResponsavel = 1;
+            $idUsuarioResponsavel = (int) Auth::usuario()['id_usuario'];
 
             $idDespesaPrevista =
                 $this->despesa
@@ -141,7 +141,7 @@ final class DespesaVeiculoController
                     $dados
                 );
 
-            $idUsuarioResponsavel = 1;
+            $idUsuarioResponsavel = (int) Auth::usuario()['id_usuario'];
 
             $atualizou =
                 $this->despesa
@@ -211,7 +211,7 @@ final class DespesaVeiculoController
                     "A despesa prevista selecionada é inválida."
                 );
 
-            $idUsuarioResponsavel = 1;
+            $idUsuarioResponsavel = (int) Auth::usuario()['id_usuario'];
 
             $idDespesa =
                 $this->despesa
@@ -271,7 +271,7 @@ final class DespesaVeiculoController
                     $dados
                 );
 
-            $idUsuarioResponsavel = 1;
+            $idUsuarioResponsavel = (int) Auth::usuario()['id_usuario'];
 
             $atualizou =
                 $this->despesa
@@ -515,7 +515,15 @@ final class DespesaVeiculoController
             $observacoes = null;
         }
 
+        $responsavelDespesa = trim(
+            (string) ($dados["responsavel_despesa"] ?? "")
+        );
+
+        $planejamento = $dados['integra_base_comercial'] ?? false;
+        if (!in_array($planejamento, [true, false, 0, 1, '0', '1'], true)) throw new InvalidArgumentException('Planejamento comercial inválido.');
         return [
+            "integra_base_comercial" => (int)(bool)$planejamento,
+            "responsavel_despesa" => $responsavelDespesa,
             "categoria" => $categoria,
             "descricao" => $descricao,
             "valor" =>

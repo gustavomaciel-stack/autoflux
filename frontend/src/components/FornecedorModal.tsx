@@ -242,14 +242,15 @@ export function FornecedorModal({
 
                   <input
                     required
-                    inputMode="numeric"
+                    inputMode="text"
+                    autoCapitalize="characters"
                     maxLength={18}
-                    placeholder="00.000.000/0000-00"
+                    placeholder="12.ABC.345/01DE-35"
                     value={formulario.cnpj}
                     onChange={(evento) =>
                       atualizarCampo(
                         "cnpj",
-                        evento.target.value,
+                        evento.target.value.toUpperCase(),
                       )
                     }
                   />

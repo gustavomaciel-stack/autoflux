@@ -56,7 +56,7 @@ export function UsuarioModal({
   const idPerfilVendedor = useMemo(
     () =>
       perfis.find(
-        (perfil) => perfil.nome === "Vendedor",
+        (perfil) => perfil.nome.trim().toLocaleLowerCase("pt-BR") === "vendedor",
       )?.id_perfil,
     [perfis],
   );
@@ -358,6 +358,7 @@ export function UsuarioModal({
                     Percentual de comissão
                     <input
                       name="percentual_comissao"
+                      required
                       type="number"
                       value={
                         formulario.percentual_comissao

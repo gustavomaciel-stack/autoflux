@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__.'/ReservaOrcamento.php';
+
 final class MovimentacaoVeiculo
 {
     private PDO $conexao;
@@ -135,6 +137,10 @@ final class MovimentacaoVeiculo
                 throw new InvalidArgumentException(
                     "Não é possível movimentar um ciclo encerrado."
                 );
+            }
+
+            if ($situacaoNova === 'Reservado' || (new ReservaOrcamento($this->conexao))->ativa($idCiclo)) {
+                throw new InvalidArgumentException('Gerencie a reserva pelo orçamento antes de movimentar o veículo.');
             }
 
             $situacaoAnterior =

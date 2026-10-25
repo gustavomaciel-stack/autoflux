@@ -1,3 +1,5 @@
+import { useAuth } from "../context/AuthContext";
+import { Permissao } from "../components/Permissao";
 import {
   useCallback,
   useEffect,
@@ -75,6 +77,7 @@ function classeSituacao(situacao: string): string {
 }
 
 export function VeiculosPage() {
+  const { pode } = useAuth();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [busca, setBusca] = useState("");
   const [carregando, setCarregando] = useState(true);
@@ -253,13 +256,13 @@ export function VeiculosPage() {
           />
         </label>
 
-        <button
+        <Permissao codigo="veiculos.cadastrar"><button
           className="button primary"
           type="button"
           onClick={abrirCadastro}
         >
           + Nova Entrada
-        </button>
+        </button></Permissao>
       </div>
 
       {erro && (
@@ -359,7 +362,7 @@ export function VeiculosPage() {
                           )} km`}
                     </td>
 
-                    <td>
+<td>{pode("custos.visualizar") ? <>                    
                       <strong>
                         {formatarValor(
                           veiculo.origem_entrada === "consignação"
@@ -373,7 +376,7 @@ export function VeiculosPage() {
                           ? "Repasse acordado"
                           : `Aquisição: ${formatarData(veiculo.data_compra)}`}
                       </small>
-                    </td>
+                    </> : "Acesso restrito"}</td>
 
                     <td>
                       <strong>
@@ -399,14 +402,14 @@ export function VeiculosPage() {
 
                     <td>
                       <div className="row-actions">
-                        <button
+                        <Permissao codigo="veiculos.editar"><button
                           type="button"
                           onClick={() =>
                             abrirEdicao(veiculo)
                           }
                         >
                           Editar
-                        </button>
+                        </button></Permissao>
 
                         <button
                           type="button"
@@ -426,14 +429,14 @@ export function VeiculosPage() {
                           Ciclos
                         </button>
 
-                        <button
+                        <Permissao codigo="despesas.visualizar"><button
                           type="button"
                           onClick={() =>
                             abrirCustos(veiculo)
                           }
                         >
                           Resumo financeiro
-                        </button>
+                        </button></Permissao>
                       </div>
                     </td>
                   </tr>

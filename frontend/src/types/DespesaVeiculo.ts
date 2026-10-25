@@ -15,6 +15,7 @@ export type SituacaoDespesaPrevista =
   | "Cancelada";
 
 export interface DespesaRealizada {
+  responsavel_despesa: string | null;
   id_despesa: number;
   id_ciclo: number;
   id_fornecedor: number;
@@ -31,6 +32,9 @@ export interface DespesaRealizada {
 }
 
 export interface DespesaPrevista {
+  integra_base_comercial: number;
+  data_inclusao_planejamento: string | null;
+  responsavel_despesa: string | null;
   id_despesa_prevista: number;
   id_aquisicao: number;
   id_avaliacao: number | null;
@@ -69,6 +73,8 @@ export interface CustosVeiculo {
 }
 
 export interface DespesaPrevistaFormData {
+  integra_base_comercial: boolean;
+  responsavel_despesa: string;
   categoria: CategoriaDespesa | "";
   descricao: string;
   valor: string;
@@ -76,6 +82,7 @@ export interface DespesaPrevistaFormData {
 }
 
 export interface DespesaRealizadaFormData {
+  responsavel_despesa: string;
   id_fornecedor: string;
   id_despesa_prevista: string;
   categoria: CategoriaDespesa | "";

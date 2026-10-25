@@ -48,6 +48,8 @@ const categorias: CategoriaDespesa[] = [
 ];
 
 const previstaVazia: DespesaPrevistaFormData = {
+  integra_base_comercial: false,
+  responsavel_despesa: "",
   categoria: "",
   descricao: "",
   valor: "",
@@ -57,6 +59,7 @@ const previstaVazia: DespesaPrevistaFormData = {
 const realizadaVazia: DespesaRealizadaFormData = {
   id_fornecedor: "",
   id_despesa_prevista: "",
+  responsavel_despesa: "",
   categoria: "",
   descricao: "",
   data_despesa: "",
@@ -76,6 +79,13 @@ function formatarMoeda(
   valor: string | number,
 ): string {
   return formatadorMoeda.format(Number(valor));
+}
+
+function formatarRegistro(data: string | null): string {
+  if (!data || data.startsWith("0000-00-00")) return "Não informado";
+  const partes = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(data);
+  if (!partes) return "Não informado";
+  return `${partes[3]}/${partes[2]}/${partes[1]} às ${partes[4]}:${partes[5]}:${partes[6] ?? "00"}`;
 }
 
 function formatarData(data: string): string {
@@ -248,6 +258,7 @@ export function CustosVeiculoModal({
           (formularioAtual) => ({
             ...formularioAtual,
             id_despesa_prevista: value,
+            responsavel_despesa: prevista.responsavel_despesa ?? "",
             categoria: prevista.categoria,
             descricao: prevista.descricao,
             valor: prevista.valor_previsto,
@@ -272,6 +283,7 @@ export function CustosVeiculoModal({
     setTipoFormulario("prevista");
     setFormularioPrevista({
       ...previstaVazia,
+      responsavel_despesa: "",
     });
     setErro("");
     setSucesso("");
@@ -284,6 +296,7 @@ export function CustosVeiculoModal({
 
     setFormularioRealizada({
       ...realizadaVazia,
+      responsavel_despesa: despesaPrevista?.responsavel_despesa ?? "",
 
       id_despesa_prevista:
         despesaPrevista
@@ -379,7 +392,7 @@ export function CustosVeiculoModal({
           );
 
         setSucesso(
-          "Despesa prevista cadastrada com sucesso.",
+          "Despesa identificada na compra cadastrada com sucesso.",
         );
       } else {
         custosAtualizados =
@@ -416,7 +429,7 @@ export function CustosVeiculoModal({
     }
 
     const confirmou = window.confirm(
-      `Deseja excluir a despesa prevista "${despesa.descricao}"?`,
+      `Deseja excluir a despesa identificada na compra "${despesa.descricao}"?`,
     );
 
     if (!confirmou) {
@@ -440,13 +453,13 @@ export function CustosVeiculoModal({
       setCustos(custosAtualizados);
 
       setSucesso(
-        "Despesa prevista excluída com sucesso.",
+        "Despesa identificada na compra excluída com sucesso.",
       );
     } catch (falha) {
       setErro(
         falha instanceof Error
           ? falha.message
-          : "Não foi possível excluir a despesa prevista.",
+          : "Não foi possível excluir a despesa identificada na compra.",
       );
     } finally {
       setExcluindo(null);
@@ -507,6 +520,28 @@ export function CustosVeiculoModal({
       (despesa) =>
         despesa.situacao === "Pendente",
     ) ?? [];
+
+  const consignado = custos?.origem_entrada === "consignação";
+  const somarRealizadas = (responsavel: string) =>
+    (custos?.despesas_realizadas ?? [])
+      .filter((despesa) => despesa.responsavel_despesa === responsavel)
+      .reduce((total, despesa) => total + Math.round(Number(despesa.valor) * 100), 0) / 100;
+  const realizadasRevenda = somarRealizadas("Revenda");
+  const realizadasProprietario = somarRealizadas("Proprietário");
+  const descontosRepasse = somarRealizadas("Desconto no repasse");
+  const repasseLiquido = custos?.valor_repasse_acordado == null
+    ? null
+    : (Math.round(Number(custos.valor_repasse_acordado) * 100) - Math.round(descontosRepasse * 100)) / 100;
+  const investidoRevenda = realizadasRevenda + descontosRepasse;
+  const realizadasSemResponsavel = (custos?.despesas_realizadas ?? [])
+    .filter((despesa) => !["Revenda", "Proprietário", "Desconto no repasse"].includes(despesa.responsavel_despesa ?? ""))
+    .reduce((total, despesa) => total + Math.round(Number(despesa.valor) * 100), 0) / 100;
+  const pendentesDescontoRepasse = despesasPrevistasPendentes
+    .filter((despesa) => despesa.responsavel_despesa === "Desconto no repasse")
+    .reduce((total, despesa) => total + Math.round(Number(despesa.valor_previsto) * 100), 0) / 100;
+  const pendentesRevenda = despesasPrevistasPendentes
+    .filter((despesa) => despesa.responsavel_despesa === "Revenda")
+    .reduce((total, despesa) => total + Math.round(Number(despesa.valor_previsto) * 100), 0) / 100;
 
   return (
     <>
@@ -605,15 +640,8 @@ export function CustosVeiculoModal({
                       />
                     </label>
 
-                    {custos.origem_entrada === "consignação" && (
-                      <label className="field">
-                        Responsável pelas despesas
-                        <input value={custos.responsavel_despesas ?? "Não informado"} readOnly />
-                      </label>
-                    )}
-
                     <label className="field">
-                      Despesas realizadas
+                      {consignado ? "Total de despesas realizadas" : "Despesas realizadas"}
 
                       <input
                         value={formatarMoeda(
@@ -625,25 +653,60 @@ export function CustosVeiculoModal({
                     </label>
                   </div>
 
+                  {consignado && (
+                    <div className="form-grid">
+                      <label className="field">
+                        Despesas realizadas — Revenda
+                        <input value={formatarMoeda(realizadasRevenda)} readOnly />
+                      </label>
+                      <label className="field">
+                        Despesas realizadas — Proprietário
+                        <input value={formatarMoeda(realizadasProprietario)} readOnly />
+                      </label>
+                      <label className="field">
+                        Despesas realizadas — Desconto no repasse
+                        <input value={formatarMoeda(descontosRepasse)} readOnly />
+                      </label>
+                      <label className="field">
+                        Repasse líquido estimado ao proprietário
+                        <input value={repasseLiquido === null ? "Não informado" : formatarMoeda(repasseLiquido)} readOnly />
+                      </label>
+                      <label className="field field-full">
+                        Despesas pendentes — Desconto no repasse
+                        <input value={formatarMoeda(pendentesDescontoRepasse)} readOnly />
+                      </label>
+                      {repasseLiquido !== null && repasseLiquido < 0 && (
+                        <p className="field field-full" role="alert">
+                          Os descontos realizados ultrapassam o repasse acordado. Revise os lançamentos e o acerto com o proprietário.
+                        </p>
+                      )}
+                      {realizadasSemResponsavel !== 0 && (
+                        <label className="field">
+                          Despesas realizadas — Responsável não informado
+                          <input value={formatarMoeda(realizadasSemResponsavel)} readOnly />
+                        </label>
+                      )}
+                    </div>
+                  )}
+
                   <div className="form-grid">
                     <label className="field">
-                      Despesas previstas pendentes
+                      {consignado ? "Despesas identificadas na compra pendentes — Revenda" : "Despesas identificadas na compra pendentes"}
 
                       <input
                         value={formatarMoeda(
-                          custos
-                            .total_despesas_previstas,
+                          consignado ? pendentesRevenda : custos.total_despesas_previstas,
                         )}
                         readOnly
                       />
                     </label>
 
-                    <label className="field">
-                      Total investido
+                    <label className="field" style={{ alignSelf: "end" }}>
+                      {consignado ? "Total investido pela revenda" : "Total investido"}
 
                       <input
                         value={formatarMoeda(
-                          custos.custo_acumulado,
+                          consignado ? investidoRevenda : custos.custo_acumulado,
                         )}
                         readOnly
                       />
@@ -651,11 +714,11 @@ export function CustosVeiculoModal({
                   </div>
 
                   <label className="field field-full">
-                    Total projetado
+                    {consignado ? "Total projetado pela revenda" : "Total projetado"}
 
                     <input
                       value={formatarMoeda(
-                        custos.custo_projetado,
+                        consignado ? investidoRevenda + pendentesRevenda + pendentesDescontoRepasse : custos.custo_projetado,
                       )}
                       readOnly
                     />
@@ -667,7 +730,7 @@ export function CustosVeiculoModal({
                       type="button"
                       onClick={abrirNovaPrevista}
                     >
-                      + Despesa prevista
+                      + Despesa identificada na compra
                     </button>
 
                     <button
@@ -682,13 +745,13 @@ export function CustosVeiculoModal({
                   </div>
 
                   <h3 className="form-section-title">
-                    Despesas previstas
+                    Despesas identificadas na compra
                   </h3>
 
                   {custos.despesas_previstas
                     .length === 0 ? (
                     <div className="empty-state">
-                      Nenhuma despesa prevista.
+                      Nenhuma despesa identificada na compra.
                     </div>
                   ) : (
                     custos.despesas_previstas.map(
@@ -714,6 +777,16 @@ export function CustosVeiculoModal({
                             {despesa.situacao}
                           </p>
 
+                          <p>
+                            <strong>Lançado por:</strong>{" "}
+                            {despesa.usuario_responsavel ?? "Não informado"}
+                            {" · "}
+                            {formatarRegistro(despesa.data_cadastro)}
+                          </p>
+
+                          {custos.origem_entrada === "consignação" && (
+                            <p>Responsável pela despesa: {despesa.responsavel_despesa ?? "Não informado"}</p>
+                          )}
                           {despesa.observacoes && (
                             <p>
                               {despesa.observacoes}
@@ -783,16 +856,6 @@ export function CustosVeiculoModal({
                   ) : (
                     custos.despesas_realizadas.map(
                       (despesa) => {
-                        const prevista =
-                          custos.despesas_previstas
-                            .some(
-                              (item) =>
-                                item
-                                  .id_despesa_realizada
-                                ===
-                                despesa.id_despesa,
-                            );
-
                         return (
                           <div
                             className="more-fields"
@@ -813,15 +876,6 @@ export function CustosVeiculoModal({
                             </p>
 
                             <p>
-                              <strong>
-                                Classificação:
-                              </strong>{" "}
-                              {prevista
-                                ? "Prevista"
-                                : "Imprevista"}
-                            </p>
-
-                            <p>
                               {formatarData(
                                 despesa
                                   .data_despesa,
@@ -830,7 +884,17 @@ export function CustosVeiculoModal({
                               {despesa.fornecedor}
                             </p>
 
-                            {despesa.observacoes && (
+                            <p>
+                            <strong>Lançado por:</strong>{" "}
+                            {despesa.usuario_responsavel ?? "Não informado"}
+                            {" · "}
+                            {formatarRegistro(despesa.data_cadastro)}
+                          </p>
+
+                          {custos.origem_entrada === "consignação" && (
+                            <p>Responsável pela despesa: {despesa.responsavel_despesa ?? "Não informado"}</p>
+                          )}
+                          {despesa.observacoes && (
                               <p>
                                 {despesa.observacoes}
                               </p>
@@ -904,7 +968,7 @@ export function CustosVeiculoModal({
             <div className="modal-header">
               <h2 id="titulo-formulario-despesa">
                 {tipoFormulario === "prevista"
-                  ? "Nova despesa prevista"
+                  ? "Nova despesa identificada na compra"
                   : formularioRealizada.id_despesa_prevista
                     ? "Registrar realização"
                     : "Nova despesa realizada"}
@@ -929,7 +993,26 @@ export function CustosVeiculoModal({
                   </div>
                 )}
 
-                {tipoFormulario === "prevista" ? (
+                
+            {custos?.origem_entrada === "consignação" && (
+              <label className="field field-full">
+                Responsável pela despesa *
+                <select
+                  name="responsavel_despesa"
+                  value={tipoFormulario === "prevista" ? formularioPrevista.responsavel_despesa : formularioRealizada.responsavel_despesa}
+                  onChange={tipoFormulario === "prevista" ? atualizarCampoPrevista : atualizarCampoRealizada}
+                  required
+                  disabled={salvando}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="Revenda">Revenda</option>
+                  <option value="Proprietário">Proprietário</option>
+                  <option value="Desconto no repasse">Desconto no repasse</option>
+                </select>
+              </label>
+            )}
+
+{tipoFormulario === "prevista" ? (
                   <>
                     <label className="field field-full">
                       Categoria *
@@ -979,6 +1062,8 @@ export function CustosVeiculoModal({
                       />
                     </label>
 
+                    
+
                     <label className="field field-full">
                       Observações
 
@@ -993,7 +1078,7 @@ export function CustosVeiculoModal({
                 ) : (
                   <>
                     <label className="field field-full">
-                      Despesa prevista relacionada
+                      Despesa identificada na compra relacionada
 
                       <select
                         name="id_despesa_prevista"
@@ -1003,7 +1088,7 @@ export function CustosVeiculoModal({
                         onChange={atualizarCampoRealizada}
                       >
                         <option value="">
-                          Nenhuma — despesa imprevista
+                          Nenhuma — sem vínculo com despesa identificada na compra
                         </option>
 
                         {despesasPrevistasPendentes.map(
@@ -1155,6 +1240,7 @@ export function CustosVeiculoModal({
           previstaEmEdicao !== null
           || realizadaEmEdicao !== null
         }
+        consignado={custos?.origem_entrada === "consignação"}
         idCiclo={veiculo.id_ciclo}
         despesaPrevista={previstaEmEdicao}
         despesaRealizada={realizadaEmEdicao}

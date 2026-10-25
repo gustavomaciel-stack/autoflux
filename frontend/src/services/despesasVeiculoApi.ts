@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   CustosVeiculo,
   DespesaPrevistaFormData,
@@ -49,7 +50,7 @@ function obterDados(
 export async function consultarCustosVeiculo(
   idCiclo: number,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}`,
     {
       method: "GET",
@@ -72,7 +73,7 @@ export async function cadastrarDespesaPrevista(
   idCiclo: number,
   dados: DespesaPrevistaFormData,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}&tipo=prevista`,
     {
       method: "POST",
@@ -99,7 +100,7 @@ export async function atualizarDespesaPrevista(
   idDespesaPrevista: number,
   dados: DespesaPrevistaFormData,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}&tipo=prevista&id=${idDespesaPrevista}`,
     {
       method: "PUT",
@@ -125,7 +126,7 @@ export async function cadastrarDespesaRealizada(
   idCiclo: number,
   dados: DespesaRealizadaFormData,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}&tipo=realizada`,
     {
       method: "POST",
@@ -152,7 +153,7 @@ export async function atualizarDespesaRealizada(
   idDespesa: number,
   dados: DespesaRealizadaFormData,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}&tipo=realizada&id=${idDespesa}`,
     {
       method: "PUT",
@@ -178,7 +179,7 @@ export async function excluirDespesaPrevista(
   idCiclo: number,
   idDespesaPrevista: number,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}&tipo=prevista&id=${idDespesaPrevista}`,
     {
       method: "DELETE",
@@ -201,7 +202,7 @@ export async function excluirDespesaRealizada(
   idCiclo: number,
   idDespesa: number,
 ): Promise<CustosVeiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id_ciclo=${idCiclo}&tipo=realizada&id=${idDespesa}`,
     {
       method: "DELETE",

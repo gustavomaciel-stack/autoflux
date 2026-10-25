@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . "/../config/Percentual.php";
+
 final class Usuario
 {
     private PDO $conexao;
@@ -9,6 +11,7 @@ final class Usuario
     public function __construct(PDO $conexao)
     {
         $this->conexao = $conexao;
+        $this->conexao->exec("SET time_zone = '-03:00'");
     }
 
     public function listarTodos(): array
@@ -71,7 +74,9 @@ final class Usuario
         }
 
         unset($usuario);
-
+        $comissoes = $this->conexao->query('SELECT id_usuario, percentual_comissao FROM vendedores WHERE ativo = 1')->fetchAll(PDO::FETCH_KEY_PAIR);
+        foreach ($usuarios as &$usuario) $usuario['percentual_comissao'] = $comissoes[$usuario['id_usuario']] ?? null;
+        unset($usuario);
         return $usuarios;
     }
 
@@ -111,6 +116,10 @@ final class Usuario
                 $idUsuario
             );
 
+        $q = $this->conexao->prepare('SELECT percentual_comissao FROM vendedores WHERE id_usuario = ? AND ativo = 1');
+        $q->execute([$idUsuario]);
+        $comissao = $q->fetchColumn();
+        $usuario['percentual_comissao'] = $comissao === false ? null : $comissao;
         return $usuario;
     }
 
@@ -264,6 +273,7 @@ final class Usuario
                 $idsPerfis
             );
 
+            $this->sincronizarComissao($idUsuario, $dados['percentual_comissao'] ?? null);
             $this->conexao->commit();
 
             return $idUsuario;
@@ -336,6 +346,7 @@ final class Usuario
                 $idsPerfis
             );
 
+            $this->sincronizarComissao($idUsuario, $dados['percentual_comissao'] ?? null);
             $this->conexao->commit();
 
             return $resultado;
@@ -348,6 +359,34 @@ final class Usuario
 
             throw $erro;
         }
+    }
+
+    private function sincronizarComissao(int $idUsuario, mixed $percentual): void
+    {
+        $q = $this->conexao->prepare("SELECT COUNT(*) FROM usuarios_perfis up
+            INNER JOIN perfis p ON p.id_perfil = up.id_perfil AND p.ativo = 1
+            WHERE up.id_usuario = ? AND up.ativo = 1 AND LOWER(TRIM(p.nome)) IN ('vendedor','gestão','gestao','diretoria','gestão/diretoria','gestao/diretoria')");
+        $q->execute([$idUsuario]);
+        if ((int) $q->fetchColumn() === 0) {
+            $q = $this->conexao->prepare('UPDATE vendedores SET ativo = 0 WHERE id_usuario = ?');
+            $q->execute([$idUsuario]);
+            return;
+        }
+        // Gestão também pode vender. Sem comissão informada, preserva a existente
+        // ou começa em zero; o perfil Vendedor mantém a validação obrigatória.
+        $q = $this->conexao->prepare("SELECT COUNT(*) FROM usuarios_perfis up JOIN perfis p ON p.id_perfil=up.id_perfil AND p.ativo=1 WHERE up.id_usuario=? AND up.ativo=1 AND LOWER(TRIM(p.nome))='vendedor'");
+        $q->execute([$idUsuario]);
+        $vendedor = (int)$q->fetchColumn() > 0;
+        if (!$vendedor && ($percentual === null || $percentual === '')) {
+            $q = $this->conexao->prepare('SELECT percentual_comissao FROM vendedores WHERE id_usuario=?');
+            $q->execute([$idUsuario]);
+            $existente = $q->fetchColumn();
+            $percentual = $existente === false ? '0.00' : $existente;
+        }
+        $valor = Percentual::validar($percentual, 'Comissão do vendedor');
+        $q = $this->conexao->prepare('INSERT INTO vendedores (id_usuario, percentual_comissao, ativo)
+            VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE percentual_comissao = VALUES(percentual_comissao), ativo = 1');
+        $q->execute([$idUsuario, $valor]);
     }
 
     public function alterarSituacao(

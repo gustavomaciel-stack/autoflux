@@ -1,0 +1,38 @@
+.repasse-editor { padding: 18px 0 0; color: #172033; }
+.repasse-editor h3 { margin: 0 0 16px; font-size: 19px; }
+.repasse-editor h4 { margin: 24px 0 12px; font-size: 16px; }
+.repasse-current {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid #e3e9f2;
+  border-radius: 10px;
+  background: #f7faff;
+}
+.repasse-editor form { display: block; max-height: none !important; margin-top: 12px; }
+.repasse-form-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.repasse-editor .form-field { display: flex; flex-direction: column; gap: 8px; }
+.repasse-editor .form-field span { font-weight: 600; font-size: 14px; }
+.repasse-editor input, .repasse-editor textarea {
+  display: block; width: 100%; min-height: 44px;
+  padding: 11px 12px; border: 1px solid #cdd6e3; border-radius: 8px;
+  background: white; color: #172033; font: inherit; box-sizing: border-box;
+}
+.repasse-editor textarea { min-height: 96px; resize: vertical; }
+.repasse-editor input:focus, .repasse-editor textarea:focus {
+  outline: 2px solid #1769f4; outline-offset: 1px;
+}
+.repasse-form-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin: 18px 0 0; }
+.repasse-editor .button { min-height: 44px; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; }
+.repasse-editor .button.primary { background: #1769f4; color: #fff; border: 1px solid #1769f4; }
+.repasse-editor .button.secondary { background: #fff; color: #3f4d62; border: 1px solid #cdd6e3; }
+.repasse-editor .button:disabled { opacity: .6; cursor: wait; }
+.repasse-table-wrapper { overflow-x: auto; border: 1px solid #e3e9f2; border-radius: 10px; margin-top: 12px; }
+.repasse-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px; }
+.repasse-table th, .repasse-table td { padding: 12px 14px; border-bottom: 1px solid #e8edf4; text-align: left; vertical-align: top; }
+.repasse-table th { background: #f6f8fc; color: #536277; font-size: 12px; font-weight: 700; }
+.repasse-table td:first-child { white-space: nowrap; }
+.repasse-table td:last-child { min-width: 150px; max-width: 280px; }
+.repasse-table tr:last-child td { border-bottom: 0; }
+@media (max-width: 600px) {
+  .repasse-form-actions .button { flex: 1; }
+}

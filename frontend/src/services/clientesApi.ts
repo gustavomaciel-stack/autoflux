@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   Cliente,
   ClienteApiResponse,
@@ -9,6 +10,7 @@ const API_URL =
   "http://localhost/autocar/api/routes/clientes.php";
 
 export interface CadastroCliente {
+  ativo?: number;
   tipo_pessoa: TipoPessoaCliente;
   nome_razao_social: string;
   nome_fantasia: string | null;
@@ -54,7 +56,7 @@ export async function listarClientes(): Promise<Cliente[]> {
   let resposta: Response;
 
   try {
-    resposta = await fetch(API_URL, {
+    resposta = await apiFetch(API_URL, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -81,7 +83,7 @@ export async function buscarCliente(
   let resposta: Response;
 
   try {
-    resposta = await fetch(
+    resposta = await apiFetch(
       `${API_URL}?id=${idCliente}`,
       {
         method: "GET",
@@ -115,7 +117,7 @@ export async function cadastrarCliente(
   let resposta: Response;
 
   try {
-    resposta = await fetch(API_URL, {
+    resposta = await apiFetch(API_URL, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -140,4 +142,32 @@ export async function cadastrarCliente(
   }
 
   return conteudo.dados;
+}
+
+// A tela própria usa uma rota com autorização de Gestão/Diretoria,
+// Gerente de Vendas e Vendedor. A rota anterior permanece para consignados.
+const CADASTRO_URL = import.meta.env.VITE_API_CADASTRO_CLIENTES_URL
+  ?? API_URL.replace(/clientes\.php(?=$|\?)/, "cadastro-clientes.php");
+
+async function requisitarCadastro<T>(url: string, method = "GET", dados?: unknown): Promise<T> {
+  const resposta = await apiFetch(url, {
+    method,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: dados === undefined ? undefined : JSON.stringify(dados),
+  });
+  const resultado = await lerResposta<T>(resposta);
+  if (resultado.dados === undefined) throw new Error("A API não retornou os dados do cliente.");
+  return resultado.dados;
+}
+export function listarCadastroClientes(): Promise<Cliente[]> {
+  return requisitarCadastro<Cliente[]>(CADASTRO_URL);
+}
+export function salvarCadastroCliente(dados: CadastroCliente, id?: number): Promise<Cliente> {
+  return requisitarCadastro<Cliente>(id ? `${CADASTRO_URL}?id=${id}` : CADASTRO_URL, id ? "PUT" : "POST", dados);
+}
+export function alterarSituacaoCliente(id: number, ativo: boolean): Promise<Cliente> {
+  return requisitarCadastro<Cliente>(`${CADASTRO_URL}?id=${id}`, "PATCH", { ativo: ativo ? 1 : 0 });
+}
+export function listarClientesAtivos(): Promise<Cliente[]> {
+  return requisitarCadastro<Cliente[]>(`${CADASTRO_URL}?ativos=1`);
 }

@@ -2,10 +2,18 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../config/Auth.php';
+try {
+    Auth::proteger();
+} catch (Throwable $erro) {
+    Auth::responder(500, ['sucesso' => false, 'mensagem' => 'Não foi possível validar a sessão.']);
+}
+
+
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Headers: Content-Type, X-CSRF-Token");
 
 if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
     http_response_code(204);
@@ -131,6 +139,18 @@ try {
         FILTER_VALIDATE_INT
     );
 
+    if ($metodo === "GET" && isset($_GET["id_ciclo"])) {
+        $idCiclo = filter_input(INPUT_GET, "id_ciclo", FILTER_VALIDATE_INT);
+        if (!$idCiclo || $idCiclo <= 0) {
+            responderConsignacao(["sucesso" => false, "mensagem" => "Informe um ciclo válido."], 400);
+        }
+        $dados = $model->buscarPorCiclo($idCiclo);
+        if ($dados === null) {
+            responderConsignacao(["sucesso" => false, "mensagem" => "Consignação não encontrada para este ciclo."], 404);
+        }
+        responderConsignacao(["sucesso" => true, "dados" => $dados]);
+    }
+
     if ($metodo === "GET") {
         if (isset($_GET["id"])) {
             if (
@@ -146,6 +166,10 @@ try {
                     ],
                     400
                 );
+            }
+
+            if (($_GET["acao"] ?? "") === "historico_repasse") {
+                responderConsignacao($controller->historicoRepasse($idConsignacao));
             }
 
             responderConsignacao(
@@ -191,6 +215,10 @@ try {
             (string) ($dados["acao"] ?? "")
         );
 
+        if ($acao === "alterar_repasse") {
+            responderConsignacao($controller->alterarRepasse($idConsignacao, $dados));
+        }
+
         if ($acao !== "devolver") {
             responderConsignacao(
                 [
@@ -226,6 +254,14 @@ try {
         400
     );
 } catch (PDOException $erro) {
+    if ((string) $erro->getCode() === "42S02"
+        && str_contains($erro->getMessage(), "historico_repasse_consignacao")) {
+        responderConsignacao([
+            "sucesso" => false,
+            "mensagem" => "O histórico de repasse ainda não foi configurado. Execute o SQL de criação no banco utilizado pela API.",
+        ], 503);
+    }
+
     if ((string) $erro->getCode() === "23000") {
         responderConsignacao(
             [

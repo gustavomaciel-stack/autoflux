@@ -12,6 +12,49 @@ final class ConsignacaoController
         $this->consignacao = $consignacao;
     }
 
+    public function historicoRepasse(int $idConsignacao): array
+    {
+        return ['sucesso' => true, 'dados' => $this->consignacao->listarHistoricoRepasse($idConsignacao)];
+    }
+
+    public function alterarRepasse(int $idConsignacao, array $dados): array
+    {
+        $motivo = trim((string) ($dados['motivo'] ?? ''));
+        if (!preg_match('/^.{1,250}$/us', $motivo)) {
+            throw new InvalidArgumentException('Informe o motivo da alteração (até 250 caracteres).');
+        }
+        $valor = $this->validarValorEdicaoRepasse($dados['valor_repasse_acordado'] ?? null);
+        if ($valor === '0.00') {
+            throw new InvalidArgumentException('O repasse deve ser maior que zero.');
+        }
+        if (!array_key_exists('valor_anterior', $dados)) {
+            throw new InvalidArgumentException('Atualize os detalhes antes de alterar o repasse.');
+        }
+        $esperado = $dados['valor_anterior'] === null
+            ? null : $this->validarValorEdicaoRepasse($dados['valor_anterior']);
+        $usuario = Auth::usuario();
+        return [
+            'sucesso' => true,
+            'mensagem' => 'Repasse atualizado e alteração registrada no histórico.',
+            'dados' => $this->consignacao->alterarRepasse(
+                $idConsignacao, (int) $usuario['id_usuario'], $valor, $motivo, $esperado
+            ),
+        ];
+    }
+
+    private function validarValorEdicaoRepasse(mixed $valor): string
+    {
+        if (!is_string($valor) && !is_int($valor) && !is_float($valor)) {
+            throw new InvalidArgumentException('Informe um valor de repasse válido.');
+        }
+        $texto = str_replace(',', '.', trim((string) $valor));
+        if (!preg_match('/^([0-9]{1,10})(?:\.([0-9]{1,2}))?$/', $texto, $partes)) {
+            throw new InvalidArgumentException('Informe um valor sem separador de milhar e com até duas casas decimais.');
+        }
+        $inteiro = ltrim($partes[1], '0');
+        return ($inteiro === '' ? '0' : $inteiro) . '.' . str_pad($partes[2] ?? '', 2, '0');
+    }
+
     public function listar(): array
     {
         return [
@@ -262,12 +305,8 @@ final class ConsignacaoController
                 $dadosRecebidos['valor_repasse_acordado'] ?? null
             );
 
-        $responsavelDespesas =
-            $this->campoObrigatorio(
-                $dadosRecebidos,
-                'responsavel_despesas',
-                'Informe quem será responsável pelas despesas.'
-            );
+        // A responsabilidade passa a ser registrada em cada despesa.
+        $responsavelDespesas = null;
 
         $dataAcordo = trim(
             (string) ($dadosRecebidos['data_acordo'] ?? '')
@@ -368,24 +407,6 @@ final class ConsignacaoController
             $dataAcordo,
             'A data do acordo é inválida.'
         );
-
-        $responsaveisPermitidos = [
-            'Revenda',
-            'Proprietário',
-            'Desconto no repasse',
-        ];
-
-        if (
-            !in_array(
-                $responsavelDespesas,
-                $responsaveisPermitidos,
-                true
-            )
-        ) {
-            throw new InvalidArgumentException(
-                'A responsabilidade pelas despesas é inválida.'
-            );
-        }
 
         if (strlen($numeroNota) > 20) {
             throw new InvalidArgumentException(

@@ -1,3 +1,4 @@
+import { CadastroEntradaAbas, useCadastroEntradaAbas } from "./CadastroEntradaAbas";
 import {
   useEffect,
   useRef,
@@ -16,6 +17,9 @@ import type {
   Veiculo,
   VeiculoFormData,
 } from "../types/Veiculo";
+
+import { RepasseNoPatio } from "./RepasseNoPatio";
+import "./VeiculoModalTabs.css";
 
 interface VeiculoModalProps {
   aberto: boolean;
@@ -131,6 +135,9 @@ export function VeiculoModal({
   const [chassiConferido, setChassiConferido] = useState("");
   const [erro, setErro] = useState("");
 
+  const [aba, setAba] = useState<"dados" | "repasse">("dados");
+
+  const entradaAbas = useCadastroEntradaAbas(aberto);
   const editando = veiculo !== null;
   const exibirDadosAquisicao =
     !editando || veiculo?.id_aquisicao !== null;
@@ -140,6 +147,7 @@ export function VeiculoModal({
       return;
     }
 
+    setAba("dados");
     versaoPesquisaChassi.current += 1;
 
     setFormulario(
@@ -232,12 +240,7 @@ export function VeiculoModal({
       setAvisoChassi("");
       setErro("");
     }
-    setFormulario((formularioAtual) => name === "chassi" ? {
-      ...formularioAtual,
-      chassi: valorTratado,
-      marca: "", modelo: "", versao: "", ano_fabricacao: "", ano_modelo: "",
-      combustivel: "", placa: "", observacoes: "", cor: "", renavam: "",
-    } : { ...formularioAtual, [name]: valorTratado });
+    setFormulario((formularioAtual) => ({ ...formularioAtual, [name]: valorTratado }));
   }
 
   async function pesquisarChassi() {
@@ -315,6 +318,7 @@ export function VeiculoModal({
     evento.preventDefault();
 
     if (!editando && chassiConferido !== formulario.chassi) {
+      entradaAbas.setEtapa(0);
       setErro("Pesquise o chassi antes de confirmar a aquisição.");
       return;
     }
@@ -352,7 +356,7 @@ export function VeiculoModal({
   return (
     <div className="modal-backdrop">
       <section
-        className="modal"
+        className={veiculo?.origem_entrada === "consignação" ? "modal vehicle-edit-modal has-repasse" : "modal vehicle-edit-modal"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="titulo-modal-veiculo"
@@ -375,7 +379,18 @@ export function VeiculoModal({
           </button>
         </div>
 
-        <form onSubmit={salvar}>
+        {veiculo?.origem_entrada === "consignação" && (
+          <div className="vehicle-editor-tabs" role="group" aria-label="Seções de edição">
+            <button type="button" className={aba === "dados" ? "vehicle-editor-tab active" : "vehicle-editor-tab"}
+              aria-pressed={aba === "dados"} onClick={() => setAba("dados")}>Dados do veículo</button>
+            <button type="button" className={aba === "repasse" ? "vehicle-editor-tab active" : "vehicle-editor-tab"}
+              aria-pressed={aba === "repasse"} onClick={() => setAba("repasse")}>Repasse e histórico</button>
+          </div>
+        )}
+
+        <div style={{ display: aba === "dados" ? "block" : "none" }}>
+        <form onSubmit={salvar} onInvalidCapture={entradaAbas.validar}>
+          {!editando&&<CadastroEntradaAbas id={entradaAbas.id} etapa={entradaAbas.etapa} onEtapa={entradaAbas.setEtapa} tituloSegundo="Aquisição e nota fiscal" bloqueado={salvando}/> }
           <div className="modal-body">
             {erro && (
               <div className="alert error page-alert">
@@ -384,6 +399,7 @@ export function VeiculoModal({
             )}
             {avisoChassi && <div className="alert page-alert" role="status">{avisoChassi}</div>}
 
+            <section id={entradaAbas.id+"-panel-0"} role={!editando?"tabpanel":undefined} aria-labelledby={!editando?entradaAbas.id+"-tab-0":undefined} data-etapa-entrada="0" hidden={!editando&&entradaAbas.etapa!==0}>
             <h3 className="form-section-title">
               Dados do veículo
             </h3>
@@ -603,6 +619,8 @@ export function VeiculoModal({
               />
             </label>
 
+            </section>
+            <section id={entradaAbas.id+"-panel-1"} role={!editando?"tabpanel":undefined} aria-labelledby={!editando?entradaAbas.id+"-tab-1":undefined} data-etapa-entrada="1" hidden={!editando&&entradaAbas.etapa!==1}>
             {exibirDadosAquisicao && (
               <>
                 <h3 className="form-section-title">
@@ -806,6 +824,7 @@ export function VeiculoModal({
                 </label>
               </>
             )}
+            </section>
           </div>
 
           <div className="modal-actions">
@@ -818,7 +837,8 @@ export function VeiculoModal({
               Cancelar
             </button>
 
-            <button
+            {!editando&&entradaAbas.etapa===1&&<button type="button" className="button secondary" disabled={salvando} onClick={()=>entradaAbas.setEtapa(0)}>Anterior</button>}
+            {!editando&&entradaAbas.etapa===0?<button type="button" className="button primary" disabled={salvando} onClick={e=>entradaAbas.proxima(e.currentTarget)}>Próxima</button>:<button
               className="button primary"
               type="submit"
               disabled={salvando}
@@ -828,9 +848,15 @@ export function VeiculoModal({
                 : editando
                   ? "Salvar alterações"
                   : "Confirmar entrada"}
-            </button>
+            </button>}
           </div>
         </form>
+        </div>
+        {aba === "repasse" && veiculo && (
+          <div className="modal-body repasse-patio-body">
+            <RepasseNoPatio key={veiculo.id_ciclo} idCiclo={veiculo.id_ciclo} />
+          </div>
+        )}
       </section>
     </div>
   );

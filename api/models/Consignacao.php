@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__.'/ReservaOrcamento.php';
+
 final class Consignacao
 {
     private PDO $conexao;
@@ -9,6 +11,91 @@ final class Consignacao
     public function __construct(PDO $conexao)
     {
         $this->conexao = $conexao;
+        // Horário de Brasília para CURRENT_TIME e CURRENT_TIMESTAMP.
+        $this->conexao->exec("SET time_zone = '-03:00'");
+    }
+
+    public function buscarPorCiclo(int $idCiclo): ?array
+    {
+        $q = $this->conexao->prepare("SELECT id_consignacao FROM consignacoes WHERE id_ciclo = :id LIMIT 1");
+        $q->execute(['id' => $idCiclo]);
+        $id = $q->fetchColumn();
+        return $id === false ? null : $this->buscarPorId((int) $id);
+    }
+
+    public function listarHistoricoRepasse(int $idConsignacao): array
+    {
+        if ($this->buscarPorId($idConsignacao) === null) {
+            throw new RuntimeException('Consignação não encontrada.');
+        }
+        $q = $this->conexao->prepare("
+            SELECT h.id_historico, h.valor_anterior, h.valor_novo,
+                   h.motivo, h.id_usuario, h.data_alteracao,
+                   u.nome AS usuario
+            FROM historico_repasse_consignacao h
+            LEFT JOIN usuarios u ON u.id_usuario = h.id_usuario
+            WHERE h.id_consignacao = :id
+            ORDER BY h.id_historico DESC
+        ");
+        $q->execute(['id' => $idConsignacao]);
+        return $q->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function alterarRepasse(
+        int $idConsignacao, int $idUsuario, string $valor,
+        string $motivo, ?string $valorEsperado
+    ): array {
+        $this->conexao->beginTransaction();
+        try {
+            $q = $this->conexao->prepare("
+                SELECT co.valor_repasse_acordado, co.situacao, c.data_encerramento
+                FROM consignacoes co
+                INNER JOIN ciclos_veiculo c ON c.id_ciclo = co.id_ciclo
+                WHERE co.id_consignacao = :id
+                FOR UPDATE
+            ");
+            $q->execute(['id' => $idConsignacao]);
+            $atual = $q->fetch(PDO::FETCH_ASSOC);
+            if (!$atual) {
+                throw new RuntimeException('Consignação não encontrada.');
+            }
+            if ($atual['situacao'] !== 'Ativa' || $atual['data_encerramento'] !== null) {
+                throw new InvalidArgumentException('Somente consignações ativas com ciclo aberto podem ter o repasse alterado.');
+            }
+            $anterior = $atual['valor_repasse_acordado'] === null
+                ? null : number_format((float) $atual['valor_repasse_acordado'], 2, '.', '');
+            if ($anterior !== $valorEsperado) {
+                throw new InvalidArgumentException('O repasse foi alterado por outro usuário. Feche e reabra os detalhes antes de tentar novamente.');
+            }
+            if ($anterior === $valor) {
+                throw new InvalidArgumentException('Informe um valor diferente do repasse atual.');
+            }
+            $this->validarUsuario($idUsuario);
+            $q = $this->conexao->prepare("
+                INSERT INTO historico_repasse_consignacao
+                    (id_consignacao, valor_anterior, valor_novo, motivo, id_usuario, data_alteracao)
+                VALUES (:id, :anterior, :novo, :motivo, :usuario, CURRENT_TIMESTAMP)
+            ");
+            $q->execute([
+                'id' => $idConsignacao, 'anterior' => $anterior, 'novo' => $valor,
+                'motivo' => $motivo, 'usuario' => $idUsuario,
+            ]);
+            $q = $this->conexao->prepare("
+                UPDATE consignacoes
+                SET valor_repasse_acordado = :valor, data_atualizacao = CURRENT_TIMESTAMP
+                WHERE id_consignacao = :id
+            ");
+            $q->execute(['valor' => $valor, 'id' => $idConsignacao]);
+            $resultado = $this->buscarPorId($idConsignacao);
+            if ($resultado === null) {
+                throw new RuntimeException('Não foi possível consultar o repasse atualizado.');
+            }
+            $this->conexao->commit();
+            return $resultado;
+        } catch (Throwable $erro) {
+            if ($this->conexao->inTransaction()) $this->conexao->rollBack();
+            throw $erro;
+        }
     }
 
     public function listar(): array
@@ -272,6 +359,12 @@ final class Consignacao
                 throw new InvalidArgumentException(
                     'Somente consignações ativas podem ser devolvidas.'
                 );
+            }
+
+            $bloqueio = $this->conexao->prepare('SELECT id_ciclo FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE');
+            $bloqueio->execute([$consignacao['id_ciclo']]);
+            if ((new ReservaOrcamento($this->conexao))->ativa((int)$consignacao['id_ciclo'])) {
+                throw new InvalidArgumentException('Libere a reserva no orçamento antes de devolver o consignado.');
             }
 
             $dataEntrada = substr((string) $consignacao['data_entrada'], 0, 10);

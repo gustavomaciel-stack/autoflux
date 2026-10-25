@@ -1,0 +1,18 @@
+.page-toolbar.perfis-toolbar {
+  align-items: center;
+}
+
+.page-toolbar.perfis-toolbar > .button {
+  align-self: center;
+  flex-shrink: 0;
+  height: 44px;
+  min-width: 145px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .page-toolbar.perfis-toolbar > .button {
+    align-self: flex-end;
+  }
+}

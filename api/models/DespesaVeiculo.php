@@ -9,6 +9,7 @@ final class DespesaVeiculo
     public function __construct(PDO $conexao)
     {
         $this->conexao = $conexao;
+        $this->conexao->exec("SET time_zone = '-03:00'");
     }
 
     public function consultarPorCiclo(
@@ -29,12 +30,35 @@ final class DespesaVeiculo
         return $resumo;
     }
 
-    public function cadastrarPrevista(
+    public function cadastrarPrevista(int $idCiclo, int $idUsuarioResponsavel, array $dados): int {
+        $this->conexao->beginTransaction();
+        try {
+            $this->bloquearPlanejamento($idCiclo);
+            $id = $this->cadastrarPrevistaInterna($idCiclo, $idUsuarioResponsavel, $dados);
+            $this->conexao->commit(); return $id;
+        } catch (Throwable $e) { if ($this->conexao->inTransaction()) $this->conexao->rollBack(); throw $e; }
+    }
+    public function atualizarPrevista(int $idCiclo, int $idDespesaPrevista, int $idUsuarioResponsavel, array $dados): bool {
+        $this->conexao->beginTransaction();
+        try {
+            $this->bloquearPlanejamento($idCiclo);
+            $ok = $this->atualizarPrevistaInterna($idCiclo, $idDespesaPrevista, $idUsuarioResponsavel, $dados);
+            $this->conexao->commit(); return $ok;
+        } catch (Throwable $e) { if ($this->conexao->inTransaction()) $this->conexao->rollBack(); throw $e; }
+    }
+    private function bloquearPlanejamento(int $ciclo): void {
+        $q=$this->conexao->prepare('SELECT id_ciclo FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE');$q->execute([$ciclo]);
+        // O bloqueio do ciclo impede que a classificação mude no meio da criação.
+        // Marcação é explícita; novas previsões têm padrão 0 e não alteram propostas existentes.
+    }
+
+    private function cadastrarPrevistaInterna(
         int $idCiclo,
         int $idUsuarioResponsavel,
         array $dados
     ): int {
         $this->validarCiclo($idCiclo);
+            $responsavelDespesa = $this->prepararResponsavelDespesa($idCiclo, $dados);
 
         $idAquisicao =
             $this->buscarIdAquisicao($idCiclo);
@@ -46,6 +70,9 @@ final class DespesaVeiculo
                 id_avaliacao,
                 id_despesa_realizada,
                 id_usuario_responsavel,
+                responsavel_despesa,
+                integra_base_comercial,
+                data_inclusao_planejamento,
                 categoria,
                 descricao,
                 valor_previsto,
@@ -57,6 +84,9 @@ final class DespesaVeiculo
                 NULL,
                 NULL,
                 :id_usuario_responsavel,
+                :responsavel_despesa,
+                :integra_base_comercial,
+                IF(:planejamento_data = 1, CURRENT_TIMESTAMP, NULL),
                 :categoria,
                 :descricao,
                 :valor_previsto,
@@ -72,6 +102,9 @@ final class DespesaVeiculo
             "id_ciclo" => $idCiclo,
             "id_usuario_responsavel" =>
                 $idUsuarioResponsavel,
+            "responsavel_despesa" => $responsavelDespesa,
+            "integra_base_comercial" => $dados["integra_base_comercial"],
+            "planejamento_data" => $dados["integra_base_comercial"],
             "categoria" => $dados["categoria"],
             "descricao" => $dados["descricao"],
             "valor_previsto" => $dados["valor"],
@@ -81,19 +114,21 @@ final class DespesaVeiculo
         return (int) $this->conexao->lastInsertId();
     }
 
-    public function atualizarPrevista(
+    private function atualizarPrevistaInterna(
         int $idCiclo,
         int $idDespesaPrevista,
         int $idUsuarioResponsavel,
         array $dados
     ): bool {
         $this->validarCiclo($idCiclo);
+            $responsavelDespesa = $this->prepararResponsavelDespesa($idCiclo, $dados);
 
         $sql = "
             UPDATE despesas_previstas
             SET
-                id_usuario_responsavel =
-                    :id_usuario_responsavel,
+                responsavel_despesa = :responsavel_despesa,
+                data_inclusao_planejamento = CASE WHEN :planejamento_data = 0 THEN NULL ELSE COALESCE(data_inclusao_planejamento,CURRENT_TIMESTAMP) END,
+                integra_base_comercial = :integra_base_comercial,
                 categoria = :categoria,
                 descricao = :descricao,
                 valor_previsto = :valor_previsto,
@@ -108,8 +143,9 @@ final class DespesaVeiculo
         $comando = $this->conexao->prepare($sql);
 
         $comando->execute([
-            "id_usuario_responsavel" =>
-                $idUsuarioResponsavel,
+            "responsavel_despesa" => $responsavelDespesa,
+            "integra_base_comercial" => $dados["integra_base_comercial"],
+            "planejamento_data" => $dados["integra_base_comercial"],
             "categoria" => $dados["categoria"],
             "descricao" => $dados["descricao"],
             "valor_previsto" => $dados["valor"],
@@ -132,12 +168,14 @@ final class DespesaVeiculo
 
         try {
             $this->validarCiclo($idCiclo);
+            $responsavelDespesa = $this->prepararResponsavelDespesa($idCiclo, $dados);
 
             $sql = "
                 INSERT INTO despesas_veiculo (
                     id_ciclo,
                     id_fornecedor,
                     id_usuario_responsavel,
+                    responsavel_despesa,
                     categoria,
                     descricao,
                     data_despesa,
@@ -147,6 +185,7 @@ final class DespesaVeiculo
                     :id_ciclo,
                     :id_fornecedor,
                     :id_usuario_responsavel,
+                    :responsavel_despesa,
                     :categoria,
                     :descricao,
                     :data_despesa,
@@ -163,7 +202,8 @@ final class DespesaVeiculo
                     $dados["id_fornecedor"],
                 "id_usuario_responsavel" =>
                     $idUsuarioResponsavel,
-                "categoria" => $dados["categoria"],
+                "responsavel_despesa" => $responsavelDespesa,
+            "categoria" => $dados["categoria"],
                 "descricao" => $dados["descricao"],
                 "data_despesa" =>
                     $dados["data_despesa"],
@@ -232,13 +272,13 @@ final class DespesaVeiculo
         array $dados
     ): bool {
         $this->validarCiclo($idCiclo);
+            $responsavelDespesa = $this->prepararResponsavelDespesa($idCiclo, $dados);
 
         $sql = "
             UPDATE despesas_veiculo
             SET
                 id_fornecedor = :id_fornecedor,
-                id_usuario_responsavel =
-                    :id_usuario_responsavel,
+                responsavel_despesa = :responsavel_despesa,
                 categoria = :categoria,
                 descricao = :descricao,
                 data_despesa = :data_despesa,
@@ -254,8 +294,7 @@ final class DespesaVeiculo
         $comando->execute([
             "id_fornecedor" =>
                 $dados["id_fornecedor"],
-            "id_usuario_responsavel" =>
-                $idUsuarioResponsavel,
+            "responsavel_despesa" => $responsavelDespesa,
             "categoria" => $dados["categoria"],
             "descricao" => $dados["descricao"],
             "data_despesa" =>
@@ -546,6 +585,7 @@ final class DespesaVeiculo
                 despesa.id_ciclo,
                 despesa.id_fornecedor,
                 despesa.id_usuario_responsavel,
+                despesa.responsavel_despesa,
                 despesa.categoria,
                 despesa.descricao,
                 despesa.data_despesa,
@@ -566,7 +606,7 @@ final class DespesaVeiculo
                 ON fornecedor.id_fornecedor =
                     despesa.id_fornecedor
 
-            INNER JOIN usuarios AS usuario
+            LEFT JOIN usuarios AS usuario
                 ON usuario.id_usuario =
                     despesa.id_usuario_responsavel
 
@@ -600,6 +640,9 @@ final class DespesaVeiculo
                 prevista.id_avaliacao,
                 prevista.id_despesa_realizada,
                 prevista.id_usuario_responsavel,
+                prevista.responsavel_despesa,
+                prevista.integra_base_comercial,
+                prevista.data_inclusao_planejamento,
                 prevista.categoria,
                 prevista.descricao,
                 prevista.valor_previsto,
@@ -613,7 +656,7 @@ final class DespesaVeiculo
 
             FROM despesas_previstas AS prevista
 
-            INNER JOIN usuarios AS usuario
+            LEFT JOIN usuarios AS usuario
                 ON usuario.id_usuario =
                     prevista.id_usuario_responsavel
 
@@ -659,6 +702,41 @@ final class DespesaVeiculo
         }
 
         return (int) $idAquisicao;
+    }
+
+    private function prepararResponsavelDespesa(
+        int $idCiclo,
+        array $dados
+    ): string {
+        $comando = $this->conexao->prepare("
+            SELECT origem_entrada
+            FROM ciclos_veiculo
+            WHERE id_ciclo = :id_ciclo
+            LIMIT 1
+        ");
+        $comando->execute(["id_ciclo" => $idCiclo]);
+        $origem = $comando->fetchColumn();
+
+        if ($origem === false) {
+            throw new InvalidArgumentException(
+                "O ciclo informado não foi encontrado."
+            );
+        }
+        if ($origem !== "consignação") {
+            return "Revenda";
+        }
+
+        $responsavel = trim(
+            (string) ($dados["responsavel_despesa"] ?? "")
+        );
+        if (!in_array($responsavel, [
+            "Revenda", "Proprietário", "Desconto no repasse"
+        ], true)) {
+            throw new InvalidArgumentException(
+                "Selecione quem assume a despesa do consignado."
+            );
+        }
+        return $responsavel;
     }
 
     private function validarCiclo(

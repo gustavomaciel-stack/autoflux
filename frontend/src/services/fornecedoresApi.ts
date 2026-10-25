@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   ApiResponse,
   Fornecedor,
@@ -26,7 +27,7 @@ async function lerResposta<T>(
 
 export async function listarFornecedores():
 Promise<Fornecedor[]> {
-  const resposta = await fetch(API_URL, {
+  const resposta = await apiFetch(API_URL, {
     headers: {
       Accept: "application/json",
     },
@@ -41,7 +42,7 @@ Promise<Fornecedor[]> {
 export async function buscarFornecedor(
   idFornecedor: number,
 ): Promise<Fornecedor> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id=${idFornecedor}`,
     {
       headers: {
@@ -63,7 +64,7 @@ export async function buscarFornecedor(
 export async function cadastrarFornecedor(
   dados: FornecedorFormData,
 ): Promise<ApiResponse<never>> {
-  const resposta = await fetch(API_URL, {
+  const resposta = await apiFetch(API_URL, {
     method: "POST",
 
     headers: {
@@ -80,7 +81,7 @@ export async function atualizarFornecedor(
   idFornecedor: number,
   dados: FornecedorFormData,
 ): Promise<ApiResponse<never>> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id=${idFornecedor}`,
     {
       method: "PUT",
@@ -100,7 +101,7 @@ export async function alterarSituacaoFornecedor(
   idFornecedor: number,
   ativo: boolean,
 ): Promise<ApiResponse<never>> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id=${idFornecedor}`,
     {
       method: "PATCH",

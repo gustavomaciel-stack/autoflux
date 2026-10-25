@@ -1,10 +1,15 @@
+import { formatarCnpj } from "../services/cnpj";
 import {
   useEffect,
   useMemo,
   useState,
   type FormEvent,
 } from "react";
+import { RepasseConsignacao } from "../components/RepasseConsignacao";
 import { ConsignacaoModal } from "../components/ConsignacaoModal";
+import { VeiculoModal } from "../components/VeiculoModal";
+import { buscarVeiculo } from "../services/veiculosApi";
+import type { Veiculo } from "../types/Veiculo";
 import { Layout } from "../components/Layout";
 import { listarClientes } from "../services/clientesApi";
 import {
@@ -91,19 +96,7 @@ function formatarDocumento(
   }
 
   if (consignacao.cnpj_proprietario) {
-    const cnpj = consignacao.cnpj_proprietario.replace(
-      /\D/g,
-      "",
-    );
-
-    if (cnpj.length === 14) {
-      return cnpj.replace(
-        /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
-        "$1.$2.$3/$4-$5",
-      );
-    }
-
-    return consignacao.cnpj_proprietario;
+    return formatarCnpj(consignacao.cnpj_proprietario);
   }
 
   return "Documento não informado";
@@ -129,6 +122,9 @@ export function ConsignacoesPage() {
   const [clientes, setClientes] = useState<Cliente[]>(
     [],
   );
+
+  const [veiculoEmEdicao, setVeiculoEmEdicao] = useState<Veiculo | null>(null);
+  const [carregandoEdicao, setCarregandoEdicao] = useState<number | null>(null);
 
   const [busca, setBusca] = useState("");
   const [filtroSituacao, setFiltroSituacao] =
@@ -267,6 +263,24 @@ export function ConsignacoesPage() {
     );
 
     setErro("");
+  }
+
+  async function abrirEdicaoConsignado(consignacao: Consignacao) {
+    if (carregandoEdicao !== null) return;
+    setErro("");
+    setCarregandoEdicao(consignacao.id_consignacao);
+    try {
+      const veiculo = await buscarVeiculo(consignacao.id_veiculo);
+      if (Number(veiculo.id_ciclo) !== Number(consignacao.id_ciclo)) {
+        throw new Error("O veículo está em outro ciclo. Atualize a listagem antes de editar.");
+      }
+      setConsignacaoDetalhes(null);
+      setVeiculoEmEdicao(veiculo);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível abrir a edição do consignado.");
+    } finally {
+      setCarregandoEdicao(null);
+    }
   }
 
   async function abrirDetalhes(
@@ -577,6 +591,14 @@ export function ConsignacoesPage() {
                             Detalhes
                           </button>
 
+                          {consignacao.situacao === "Ativa" && consignacao.data_encerramento === null && (
+                            <button type="button" className="consignment-link-button"
+                              disabled={carregandoEdicao !== null}
+                              onClick={() => void abrirEdicaoConsignado(consignacao)}>
+                              {carregandoEdicao === consignacao.id_consignacao ? "Abrindo..." : "Editar veículo"}
+                            </button>
+                          )}
+
                           {consignacao.situacao ===
                             "Ativa" && (
                             <button
@@ -601,6 +623,16 @@ export function ConsignacoesPage() {
           </table>
         </div>
       </div>
+
+      <VeiculoModal
+        aberto={veiculoEmEdicao !== null}
+        veiculo={veiculoEmEdicao}
+        aoFechar={() => { setVeiculoEmEdicao(null); void carregarDados(); }}
+        aoSalvar={async () => {
+          await carregarDados();
+          setMensagem("Dados do veículo consignado atualizados com sucesso.");
+        }}
+      />
 
       <ConsignacaoModal
         aberto={modalCadastroAberto}
@@ -820,6 +852,17 @@ export function ConsignacoesPage() {
                 </div>
               </section>
 
+              <RepasseConsignacao
+                key={consignacaoDetalhes.id_consignacao}
+                consignacao={consignacaoDetalhes}
+                onSalvo={(atualizada) => {
+                  setConsignacoes(atuais => atuais.map(item =>
+                    item.id_consignacao === atualizada.id_consignacao ? atualizada : item));
+                  setConsignacaoDetalhes(atual =>
+                    atual?.id_consignacao === atualizada.id_consignacao ? atualizada : atual);
+                }}
+              />
+
               {normalizarTexto(
                 consignacaoDetalhes.situacao,
               ) === "devolvida" && (
@@ -859,6 +902,13 @@ export function ConsignacoesPage() {
             </div>
 
             <footer className="modal-footer">
+              {consignacaoDetalhes.situacao === "Ativa" && consignacaoDetalhes.data_encerramento === null && (
+                <button type="button" className="button primary"
+                  disabled={carregandoEdicao !== null}
+                  onClick={() => void abrirEdicaoConsignado(consignacaoDetalhes)}>
+                  {carregandoEdicao !== null ? "Abrindo..." : "Editar veículo"}
+                </button>
+              )}
               <button
                 type="button"
                 className="button button-secondary"

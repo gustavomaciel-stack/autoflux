@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   Veiculo,
   VeiculoApiResponse,
@@ -34,7 +35,7 @@ async function processarResposta<T>(
 export async function listarVeiculos(): Promise<
   Veiculo[]
 > {
-  const resposta = await fetch(ENDPOINT);
+  const resposta = await apiFetch(ENDPOINT);
 
   return processarResposta<Veiculo[]>(resposta);
 }
@@ -42,7 +43,7 @@ export async function listarVeiculos(): Promise<
 export async function buscarVeiculo(
   idVeiculo: number,
 ): Promise<Veiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${ENDPOINT}?id=${idVeiculo}`,
   );
 
@@ -52,7 +53,7 @@ export async function buscarVeiculo(
 export async function cadastrarVeiculo(
   dados: VeiculoFormData,
 ): Promise<Veiculo> {
-  const resposta = await fetch(ENDPOINT, {
+  const resposta = await apiFetch(ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -67,7 +68,7 @@ export async function atualizarVeiculo(
   idVeiculo: number,
   dados: VeiculoFormData,
 ): Promise<Veiculo> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${ENDPOINT}?id=${idVeiculo}`,
     {
       method: "PUT",
@@ -82,6 +83,6 @@ export async function atualizarVeiculo(
 }
 
 export async function buscarVeiculoPorChassi(chassi: string): Promise<Veiculo | null> {
-  const resposta = await fetch(`${ENDPOINT}?chassi=${encodeURIComponent(chassi)}`);
+  const resposta = await apiFetch(`${ENDPOINT}?chassi=${encodeURIComponent(chassi)}`);
   return processarResposta<Veiculo | null>(resposta);
 }

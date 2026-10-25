@@ -882,3 +882,32 @@ td small {
     width: 100%;
   }
 }
+.topbar .user-area > button {
+  border: 0;
+  border-radius: 7px;
+  padding: 12px 14px;
+  background: transparent;
+  color: #d4dbea;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.topbar .user-area > button:hover {
+  background: #1e6cf3;
+  color: white;
+}
+
+.topbar .user-area > button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+/* Compatibility for screens authored with button-primary / button-secondary. */
+.button.button-primary {background:#1769f4;color:#fff;border-color:#1769f4;box-shadow:0 3px 8px rgb(23 105 244 / 20%)}
+.button.button-primary:hover {background:#0c57d7}
+.button.button-secondary {background:#fff;color:#303849;border-color:#ccd3df}
+.button.button-secondary:hover {border-color:#1769f4;color:#1769f4}
+
+/* O rodapé acompanha o conteúdo e não cobre controles ou históricos. */
+.app-footer { position: static; margin-top: 24px; }

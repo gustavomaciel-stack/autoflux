@@ -1,3 +1,5 @@
+import { podeGerenciarOrcamentos } from "../services/clientesAcesso";
+import { useAuth } from "../context/AuthContext";
 import { useEffect, useMemo, useState } from "react";
 import {
   listarVeiculosParaVenda,
@@ -65,6 +67,7 @@ function obterClasseSituacao(situacao: string): string {
 }
 
 export function VendasPage() {
+ const { pode, usuario } = useAuth();
   const [veiculos, setVeiculos] = useState<VeiculoVenda[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState("Todos");
@@ -172,9 +175,9 @@ export function VendasPage() {
       return;
     }
 
-    setMensagem(
-      `O veículo ${veiculo.marca} ${veiculo.modelo}, placa ${veiculo.placa}, está disponível para comercialização.`,
-    );
+    if (!podeGerenciarOrcamentos(usuario)) { setErro("Seu perfil não permite elaborar orçamentos."); return; }
+    sessionStorage.setItem("autoflux_orcamento_ciclo",String(veiculo.id_ciclo));
+    window.location.hash = "#orcamentos";
   }
 
   return (
@@ -324,9 +327,7 @@ export function VendasPage() {
                     <td>{veiculo.combustivel}</td>
 
                     <td>
-                      {formatarMoeda(
-                        veiculo.custo_acumulado ?? veiculo.valor_aquisicao,
-                      )}
+                      {pode("custos.visualizar") ? formatarMoeda(veiculo.custo_acumulado ?? veiculo.valor_aquisicao) : "Acesso restrito"}
                     </td>
 
                     <td>
@@ -347,7 +348,7 @@ export function VendasPage() {
                       <button
                         type="button"
                         className="sales-action-button"
-                        disabled={!disponivel}
+                        disabled={!disponivel || !podeGerenciarOrcamentos(usuario)}
                         title={
                           disponivel
                             ? "Selecionar veículo para comercialização"
@@ -355,7 +356,7 @@ export function VendasPage() {
                         }
                         onClick={() => selecionarVeiculo(veiculo)}
                       >
-                        {disponivel ? "Selecionar" : "Bloqueado"}
+                        {disponivel ? "Novo orçamento" : "Bloqueado"}
                       </button>
                       </div>
                     </td>
@@ -397,7 +398,7 @@ export function VendasPage() {
                 <div><dt>Origem da entrada</dt><dd>{mostrar(veiculoDetalhes.origem_entrada)}</dd></div>
                 <div><dt>Quilometragem na entrada</dt><dd>{veiculoDetalhes.quilometragem === null ? "Não informada" : `${veiculoDetalhes.quilometragem.toLocaleString("pt-BR")} km`}</dd></div>
                 <div><dt>Horímetro na entrada</dt><dd>{mostrar(veiculoDetalhes.horimetro)}</dd></div>
-                <div><dt>Valor de aquisição</dt><dd>{veiculoDetalhes.id_aquisicao === null ? "Não se aplica" : formatarMoeda(veiculoDetalhes.valor_aquisicao)}</dd></div>
+                {pode("custos.visualizar") && <div><dt>Valor de aquisição</dt><dd>{veiculoDetalhes.id_aquisicao === null ? "Não se aplica" : formatarMoeda(veiculoDetalhes.valor_aquisicao)}</dd></div>}
               </dl>
               <h3>Observações do veículo</h3>
               <p className="sales-details-notes">{mostrar(veiculoDetalhes.observacoes)}</p>

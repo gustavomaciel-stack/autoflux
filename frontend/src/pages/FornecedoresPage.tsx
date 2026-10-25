@@ -1,3 +1,5 @@
+import { formatarCnpj, normalizarCnpj } from "../services/cnpj";
+import { Permissao } from "../components/Permissao";
 import {
   useCallback,
   useEffect,
@@ -29,10 +31,7 @@ function formatarDocumento(fornecedor: Fornecedor) {
     fornecedor.tipo_pessoa === "PJ" &&
     documento.length === 14
   ) {
-    return documento.replace(
-      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
-      "$1.$2.$3/$4-$5",
-    );
+    return formatarCnpj(documento);
   }
 
   if (
@@ -106,6 +105,7 @@ export function FornecedoresPage() {
     }
 
     return fornecedores.filter((fornecedor) =>
+      (Boolean(fornecedor.cnpj) && /^[a-z0-9.\/\-\s]+$/i.test(busca) && Boolean(normalizarCnpj(busca)) && normalizarCnpj(fornecedor.cnpj ?? '').includes(normalizarCnpj(busca))) ||
       [
         fornecedor.razao_social_nome,
         fornecedor.nome_fantasia,
@@ -226,13 +226,13 @@ export function FornecedoresPage() {
           />
         </label>
 
-        <button
+        <Permissao codigo="fornecedores.cadastrar"><button
           className="button primary"
           type="button"
           onClick={abrirCadastro}
         >
           + Novo Fornecedor
-        </button>
+        </button></Permissao>
       </div>
 
       {erro && (
@@ -358,7 +358,7 @@ export function FornecedoresPage() {
 
                         <td>
                           <div className="row-actions">
-                            <button
+                            <Permissao codigo="fornecedores.editar"><button
                               type="button"
                               onClick={() =>
                                 abrirEdicao(
@@ -367,9 +367,9 @@ export function FornecedoresPage() {
                               }
                             >
                               Editar
-                            </button>
+                            </button></Permissao>
 
-                            <button
+                            <Permissao codigo="fornecedores.situacao"><button
                               type="button"
                               className={
                                 ativo
@@ -392,7 +392,7 @@ export function FornecedoresPage() {
                                 : ativo
                                   ? "Inativar"
                                   : "Reativar"}
-                            </button>
+                            </button></Permissao>
                           </div>
                         </td>
                       </tr>

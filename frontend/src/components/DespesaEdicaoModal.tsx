@@ -20,6 +20,7 @@ import type { Fornecedor } from "../types/Fornecedor";
 
 interface DespesaEdicaoModalProps {
   aberto: boolean;
+  consignado: boolean;
   idCiclo: number | null;
   despesaPrevista: DespesaPrevista | null;
   despesaRealizada: DespesaRealizada | null;
@@ -45,6 +46,8 @@ const categorias: CategoriaDespesa[] = [
 
 const previstaVazia:
 DespesaPrevistaFormData = {
+  integra_base_comercial: false,
+  responsavel_despesa: "",
   categoria: "",
   descricao: "",
   valor: "",
@@ -55,6 +58,7 @@ const realizadaVazia:
 DespesaRealizadaFormData = {
   id_fornecedor: "",
   id_despesa_prevista: "",
+  responsavel_despesa: "",
   categoria: "",
   descricao: "",
   data_despesa: "",
@@ -64,6 +68,7 @@ DespesaRealizadaFormData = {
 
 export function DespesaEdicaoModal({
   aberto,
+  consignado,
   idCiclo,
   despesaPrevista,
   despesaRealizada,
@@ -100,6 +105,8 @@ export function DespesaEdicaoModal({
 
     if (despesaPrevista) {
       setFormularioPrevista({
+        integra_base_comercial: Number(despesaPrevista.integra_base_comercial) === 1,
+        responsavel_despesa: despesaPrevista.responsavel_despesa ?? "",
         categoria:
           despesaPrevista.categoria,
         descricao:
@@ -118,6 +125,7 @@ export function DespesaEdicaoModal({
 
     if (despesaRealizada) {
       setFormularioRealizada({
+        responsavel_despesa: despesaRealizada.responsavel_despesa ?? "",
         id_fornecedor: String(
           despesaRealizada.id_fornecedor,
         ),
@@ -228,7 +236,7 @@ export function DespesaEdicaoModal({
 
         aoSalvar(
           custosAtualizados,
-          "Despesa prevista atualizada com sucesso.",
+          "Despesa identificada na compra atualizada com sucesso.",
         );
 
         return;
@@ -283,7 +291,7 @@ export function DespesaEdicaoModal({
         <div className="modal-header">
           <h2 id="titulo-edicao-despesa">
             {editandoPrevista
-              ? "Editar despesa prevista"
+              ? "Editar despesa identificada na compra"
               : "Editar despesa realizada"}
           </h2>
 
@@ -306,7 +314,26 @@ export function DespesaEdicaoModal({
               </div>
             )}
 
-            {editandoPrevista ? (
+            
+            {consignado && (
+              <label className="field field-full">
+                Responsável pela despesa *
+                <select
+                  name="responsavel_despesa"
+                  value={editandoPrevista ? formularioPrevista.responsavel_despesa : formularioRealizada.responsavel_despesa}
+                  onChange={editandoPrevista ? atualizarCampoPrevista : atualizarCampoRealizada}
+                  required
+                  disabled={salvando}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="Revenda">Revenda</option>
+                  <option value="Proprietário">Proprietário</option>
+                  <option value="Desconto no repasse">Desconto no repasse</option>
+                </select>
+              </label>
+            )}
+
+{editandoPrevista ? (
               <>
                 <label className="field field-full">
                   Categoria *
@@ -378,7 +405,9 @@ export function DespesaEdicaoModal({
                   />
                 </label>
 
-                <label className="field field-full">
+                
+
+                    <label className="field field-full">
                   Observações
 
                   <textarea

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . "/../config/Cnpj.php";
+
 final class ClienteController
 {
     private Cliente $cliente;
@@ -97,6 +99,7 @@ final class ClienteController
             );
         }
 
+        $dadosRecebidos['ativo'] ??= $clienteExistente['ativo'];
         $dados = $this->validarEPrepararDados($dadosRecebidos);
 
         $documento = $dados['tipo_pessoa'] === 'PF'
@@ -134,6 +137,33 @@ final class ClienteController
         ];
     }
 
+    public function alterarSituacao(int $idCliente, mixed $ativo): array
+    {
+        if ($this->cliente->buscarPorId($idCliente) === null) {
+            throw new RuntimeException('Cliente não encontrado.');
+        }
+        if (!in_array($ativo, [0, 1, '0', '1', false, true], true)) {
+            throw new InvalidArgumentException('Situação do cliente inválida.');
+        }
+        $this->cliente->alterarSituacao($idCliente, (int) $ativo);
+        return ['sucesso' => true, 'mensagem' => (int) $ativo === 1 ? 'Cliente reativado.' : 'Cliente inativado.',
+            'dados' => $this->cliente->buscarPorId($idCliente)];
+    }
+
+    private function documentoValido(string $documento, string $tipo): bool
+    {
+        if ($tipo === 'PJ') return Cnpj::valido($documento);
+        if (!preg_match('/^[0-9]{11}$/D', $documento) || preg_match('/^([0-9])\1{10}$/D', $documento)) return false;
+        for ($n = 9; $n < 11; $n++) {
+            $soma = 0;
+            for ($i = 0; $i < $n; $i++) $soma += (int) $documento[$i] * ($n + 1 - $i);
+            $digito = ($soma * 10) % 11;
+            if ($digito === 10) $digito = 0;
+            if ($digito !== (int) $documento[$n]) return false;
+        }
+        return true;
+    }
+
     private function validarEPrepararDados(
         array $dadosRecebidos
     ): array {
@@ -149,13 +179,18 @@ final class ClienteController
             $dadosRecebidos['nome_fantasia'] ?? null
         );
 
+        foreach (['cpf'] as $campoDocumento) {
+            if (preg_match('/[^0-9.\/\-\s]/', (string) ($dadosRecebidos[$campoDocumento] ?? ''))) {
+                throw new InvalidArgumentException('Informe o CPF com números e pontuação válida.');
+            }
+        }
+
         $cpf = $this->somenteNumerosOuNulo(
             $dadosRecebidos['cpf'] ?? null
         );
 
-        $cnpj = $this->somenteNumerosOuNulo(
-            $dadosRecebidos['cnpj'] ?? null
-        );
+        $cnpjNormalizado = Cnpj::normalizar((string) ($dadosRecebidos['cnpj'] ?? ''));
+        $cnpj = $cnpjNormalizado !== '' ? $cnpjNormalizado : null;
 
         $telefone = preg_replace(
             '/\D+/',
@@ -215,7 +250,7 @@ final class ClienteController
             );
         }
 
-        if (strlen($nomeRazaoSocial) > 150) {
+        if (mb_strlen($nomeRazaoSocial, 'UTF-8') > 150) {
             throw new InvalidArgumentException(
                 'O nome ou razão social deve possuir no máximo 150 caracteres.'
             );
@@ -223,7 +258,7 @@ final class ClienteController
 
         if (
             $nomeFantasia !== null
-            && strlen($nomeFantasia) > 150
+            && mb_strlen($nomeFantasia, 'UTF-8') > 150
         ) {
             throw new InvalidArgumentException(
                 'O nome fantasia deve possuir no máximo 150 caracteres.'
@@ -246,19 +281,20 @@ final class ClienteController
         }
 
         if ($tipoPessoa === 'PF') {
-            if ($cpf === null || strlen($cpf) !== 11) {
+            if ($cpf === null || !$this->documentoValido($cpf, 'PF')) {
                 throw new InvalidArgumentException(
-                    'Para pessoa física, informe um CPF com 11 números.'
+                    'Para pessoa física, informe um CPF válido.'
                 );
             }
 
             $cnpj = null;
+            $nomeFantasia = null;
         }
 
         if ($tipoPessoa === 'PJ') {
-            if ($cnpj === null || strlen($cnpj) !== 14) {
+            if ($cnpj === null || !$this->documentoValido($cnpj, 'PJ')) {
                 throw new InvalidArgumentException(
-                    'Para pessoa jurídica, informe um CNPJ com 14 números.'
+                    'CNPJ inválido. Informe 12 letras/números e 2 dígitos verificadores corretos (ex.: 12.ABC.345/01DE-35).'
                 );
             }
 
@@ -280,7 +316,14 @@ final class ClienteController
             );
         }
 
-        if ($estado !== null && strlen($estado) !== 2) {
+        foreach (['email' => 150, 'logradouro' => 150, 'complemento' => 100, 'bairro' => 80, 'cidade' => 80] as $campo => $limite) {
+            $valor = $$campo;
+            if ($valor !== null && mb_strlen($valor, 'UTF-8') > $limite) {
+                throw new InvalidArgumentException('O campo ' . $campo . ' excede o tamanho permitido.');
+            }
+        }
+
+        if ($estado !== null && !in_array($estado, ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'], true)) {
             throw new InvalidArgumentException(
                 'O estado deve ser informado com a sigla de duas letras.'
             );
@@ -292,7 +335,12 @@ final class ClienteController
             );
         }
 
+        $ativo = $dadosRecebidos['ativo'] ?? 1;
+        if (!in_array($ativo, [0, 1, '0', '1', false, true], true)) {
+            throw new InvalidArgumentException('Situação do cliente inválida.');
+        }
         return [
+            'ativo' => (int) $ativo,
             'tipo_pessoa' => $tipoPessoa,
             'nome_razao_social' => $nomeRazaoSocial,
             'nome_fantasia' => $nomeFantasia,

@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   Perfil,
   Usuario,
@@ -36,7 +37,7 @@ async function processarResposta<T>(
 export async function listarUsuarios(): Promise<
   Usuario[]
 > {
-  const resposta = await fetch(ENDPOINT);
+  const resposta = await apiFetch(ENDPOINT);
 
   return processarResposta<Usuario[]>(resposta);
 }
@@ -44,7 +45,7 @@ export async function listarUsuarios(): Promise<
 export async function listarPerfis(): Promise<
   Perfil[]
 > {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${ENDPOINT}?acao=perfis`,
   );
 
@@ -54,7 +55,7 @@ export async function listarPerfis(): Promise<
 export async function buscarUsuario(
   idUsuario: number,
 ): Promise<UsuarioDetalhado> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${ENDPOINT}?id=${idUsuario}`,
   );
 
@@ -66,7 +67,7 @@ export async function buscarUsuario(
 export async function cadastrarUsuario(
   dados: UsuarioFormData,
 ): Promise<UsuarioDetalhado> {
-  const resposta = await fetch(ENDPOINT, {
+  const resposta = await apiFetch(ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -83,7 +84,7 @@ export async function atualizarUsuario(
   idUsuario: number,
   dados: UsuarioFormData,
 ): Promise<UsuarioDetalhado> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${ENDPOINT}?id=${idUsuario}`,
     {
       method: "PUT",
@@ -103,7 +104,7 @@ export async function alterarSituacaoUsuario(
   idUsuario: number,
   ativo: boolean,
 ): Promise<UsuarioDetalhado> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${ENDPOINT}?id=${idUsuario}`,
     {
       method: "PATCH",

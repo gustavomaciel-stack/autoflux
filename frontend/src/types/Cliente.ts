@@ -2,6 +2,7 @@ export type TipoPessoaCliente = "PF" | "PJ";
 
 export interface Cliente {
   id_cliente: number;
+  ativo: number | string;
   tipo_pessoa: TipoPessoaCliente;
   nome_razao_social: string;
   nome_fantasia: string | null;

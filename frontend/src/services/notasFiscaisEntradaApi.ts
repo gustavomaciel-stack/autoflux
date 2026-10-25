@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   NotaFiscalEntrada,
   NotaFiscalEntradaApiResponse,
@@ -32,7 +33,7 @@ async function lerResposta<T>(
 
 export async function listarNotasFiscaisEntrada():
 Promise<NotaFiscalEntrada[]> {
-  const resposta = await fetch(API_URL, {
+  const resposta = await apiFetch(API_URL, {
     method: "GET",
 
     headers: {
@@ -51,7 +52,7 @@ Promise<NotaFiscalEntrada[]> {
 export async function buscarNotaFiscalEntrada(
   idNotaFiscalEntrada: number,
 ): Promise<NotaFiscalEntrada> {
-  const resposta = await fetch(
+  const resposta = await apiFetch(
     `${API_URL}?id=${idNotaFiscalEntrada}`,
     {
       method: "GET",

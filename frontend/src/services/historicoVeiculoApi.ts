@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   HistoricoVeiculo,
   HistoricoVeiculoApiResponse,
@@ -28,7 +29,7 @@ export async function buscarHistoricoVeiculo(
   let resposta: Response;
 
   try {
-    resposta = await fetch(
+    resposta = await apiFetch(
       `${API_URL}?id_veiculo=${idVeiculo}`,
       {
         method: "GET",

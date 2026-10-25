@@ -1,3 +1,5 @@
+import { CadastroEntradaAbas, useCadastroEntradaAbas } from "./CadastroEntradaAbas";
+import { normalizarCnpj } from "../services/cnpj";
 import {
   useEffect,
   useRef,
@@ -49,7 +51,6 @@ interface FormularioConsignacao {
   descricao_item: string;
   natureza_operacao: string;
   valor_repasse_acordado: string;
-  responsavel_despesas: string;
   data_acordo: string;
   observacoes_veiculo: string;
   observacoes_nota: string;
@@ -103,7 +104,6 @@ function formularioInicial(): FormularioConsignacao {
     natureza_operacao:
       "Entrada de veículo em consignação",
     valor_repasse_acordado: "",
-    responsavel_despesas: "",
     data_acordo: dataAtual,
     observacoes_veiculo: "",
     observacoes_nota: "",
@@ -155,6 +155,7 @@ export function ConsignacaoModal({
   const [salvandoCliente, setSalvandoCliente] =
     useState(false);
 
+  const entradaAbas = useCadastroEntradaAbas(aberto);
   const [erro, setErro] = useState("");
   const [mensagemCliente, setMensagemCliente] =
     useState("");
@@ -189,20 +190,7 @@ export function ConsignacaoModal({
       setAvisoChassi("");
       setErro("");
     }
-    setFormulario((atual) => campo === "chassi" ? {
-      ...atual,
-      chassi: valor,
-      marca: "",
-      modelo: "",
-      versao: "",
-      ano_fabricacao: "",
-      ano_modelo: "",
-      combustivel: "Flex",
-      placa: "",
-      renavam: "",
-      cor: "",
-      observacoes_veiculo: "",
-    } : { ...atual, [campo]: valor });
+    setFormulario((atual) => ({ ...atual, [campo]: valor }));
   }
 
   async function pesquisarChassi() {
@@ -221,7 +209,7 @@ export function ConsignacaoModal({
       if (versao !== versaoPesquisaChassi.current) return;
 
       if (!encontrado) {
-        setAvisoChassi("Chassi não cadastrado. Preencha os dados do veículo.");
+        setAvisoChassi("Chassi não cadastrado. Os dados preenchidos foram mantidos.");
       } else if (encontrado.data_encerramento === null) {
         setErro(`Este chassi já possui ciclo ativo (${encontrado.nosso_numero}) no pátio.`);
         return;
@@ -264,9 +252,9 @@ export function ConsignacaoModal({
     setErro("");
     setMensagemCliente("");
 
-    const documento = somenteNumeros(
-      formularioCliente.cpf_cnpj,
-    );
+    const documento = formularioCliente.tipo_pessoa === "PJ"
+      ? normalizarCnpj(formularioCliente.cpf_cnpj)
+      : somenteNumeros(formularioCliente.cpf_cnpj);
 
     const dados: CadastroCliente = {
       tipo_pessoa: formularioCliente.tipo_pessoa,
@@ -336,6 +324,7 @@ export function ConsignacaoModal({
 
     const chassiAtual = formulario.chassi.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
     if (chassiConferido !== chassiAtual) {
+      entradaAbas.setEtapa(0);
       setErro("Pesquise o chassi antes de registrar a consignação.");
       return;
     }
@@ -404,8 +393,7 @@ export function ConsignacaoModal({
 
       valor_repasse_acordado:
         formulario.valor_repasse_acordado.trim(),
-      responsavel_despesas:
-        formulario.responsavel_despesas,
+      responsavel_despesas: "",
       data_acordo: formulario.data_acordo,
 
       observacoes_veiculo:
@@ -459,10 +447,12 @@ export function ConsignacaoModal({
           </button>
         </header>
 
+        <CadastroEntradaAbas id={entradaAbas.id} etapa={entradaAbas.etapa} onEtapa={entradaAbas.setEtapa} tituloSegundo="Proprietário e consignação" bloqueado={salvando}/>
         <form
           id="formulario-consignacao"
           className="modal-body"
           onSubmit={enviarFormulario}
+          onInvalidCapture={entradaAbas.validar}
         >
           {erro && (
             <div className="alert error">{erro}</div>
@@ -474,190 +464,7 @@ export function ConsignacaoModal({
             </div>
           )}
 
-          <section className="consignment-section">
-            <div className="consignment-section-heading">
-              <div>
-                <h3>Proprietário</h3>
-
-                <p>
-                  Selecione o proprietário do veículo
-                  consignado.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() =>
-                  setMostrarCadastroCliente(
-                    (mostrar) => !mostrar,
-                  )
-                }
-              >
-                {mostrarCadastroCliente
-                  ? "Cancelar cadastro"
-                  : "+ Novo proprietário"}
-              </button>
-            </div>
-
-            <label className="form-field">
-              <span>Proprietário *</span>
-
-              <select
-                value={formulario.id_proprietario}
-                onChange={(event) =>
-                  atualizarCampo(
-                    "id_proprietario",
-                    event.target.value,
-                  )
-                }
-                required
-              >
-                <option value="">Selecione...</option>
-
-                {clientes.map((cliente) => (
-                  <option
-                    key={cliente.id_cliente}
-                    value={cliente.id_cliente}
-                  >
-                    {cliente.nome_razao_social}
-
-                    {cliente.cpf
-                      ? ` — CPF ${cliente.cpf}`
-                      : ""}
-
-                    {cliente.cnpj
-                      ? ` — CNPJ ${cliente.cnpj}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {mostrarCadastroCliente && (
-              <div className="consignment-inline-card">
-                <h4>Cadastrar proprietário</h4>
-
-                <div className="form-grid">
-                  <label className="form-field">
-                    <span>Tipo de pessoa *</span>
-
-                    <select
-                      value={
-                        formularioCliente.tipo_pessoa
-                      }
-                      onChange={(event) =>
-                        atualizarCampoCliente(
-                          "tipo_pessoa",
-                          event.target.value as
-                            | "PF"
-                            | "PJ",
-                        )
-                      }
-                    >
-                      <option value="PF">
-                        Pessoa física
-                      </option>
-
-                      <option value="PJ">
-                        Pessoa jurídica
-                      </option>
-                    </select>
-                  </label>
-
-                  <label className="form-field">
-                    <span>
-                      {formularioCliente.tipo_pessoa ===
-                      "PF"
-                        ? "Nome completo *"
-                        : "Razão social *"}
-                    </span>
-
-                    <input
-                      type="text"
-                      value={
-                        formularioCliente.nome_razao_social
-                      }
-                      onChange={(event) =>
-                        atualizarCampoCliente(
-                          "nome_razao_social",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-
-                  <label className="form-field">
-                    <span>
-                      {formularioCliente.tipo_pessoa ===
-                      "PF"
-                        ? "CPF *"
-                        : "CNPJ *"}
-                    </span>
-
-                    <input
-                      type="text"
-                      value={
-                        formularioCliente.cpf_cnpj
-                      }
-                      onChange={(event) =>
-                        atualizarCampoCliente(
-                          "cpf_cnpj",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-
-                  <label className="form-field">
-                    <span>Telefone *</span>
-
-                    <input
-                      type="text"
-                      value={
-                        formularioCliente.telefone
-                      }
-                      onChange={(event) =>
-                        atualizarCampoCliente(
-                          "telefone",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-
-                  <label className="form-field full-width">
-                    <span>E-mail</span>
-
-                    <input
-                      type="email"
-                      value={formularioCliente.email}
-                      onChange={(event) =>
-                        atualizarCampoCliente(
-                          "email",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() =>
-                    void salvarNovoCliente()
-                  }
-                  disabled={salvandoCliente}
-                >
-                  {salvandoCliente
-                    ? "Salvando..."
-                    : "Cadastrar proprietário"}
-                </button>
-              </div>
-            )}
-          </section>
-
+          <section id={entradaAbas.id+"-panel-0"} role="tabpanel" aria-labelledby={entradaAbas.id+"-tab-0"} data-etapa-entrada="0" hidden={entradaAbas.etapa!==0}>
           <section className="consignment-section">
             <h3>Dados do veículo</h3>
 
@@ -868,21 +675,7 @@ export function ConsignacaoModal({
                 />
               </label>
 
-              <label className="form-field">
-                <span>Data de entrada *</span>
-
-                <input
-                  type="date"
-                  value={formulario.data_entrada}
-                  onChange={(event) =>
-                    atualizarCampo(
-                      "data_entrada",
-                      event.target.value,
-                    )
-                  }
-                  required
-                />
-              </label>
+              
 
               <label className="form-field full-width">
                 <span>Observações do veículo</span>
@@ -901,6 +694,194 @@ export function ConsignacaoModal({
               </label>
             </div>
           </section>
+          </section>
+          <section id={entradaAbas.id+"-panel-1"} role="tabpanel" aria-labelledby={entradaAbas.id+"-tab-1"} data-etapa-entrada="1" hidden={entradaAbas.etapa!==1}>
+          <p className="entrada-step-help">Selecione o proprietário e preencha a nota fiscal e as condições da consignação.</p>
+          <section className="consignment-section">
+            <div className="consignment-section-heading">
+              <div>
+                <h3>Proprietário</h3>
+
+                <p>
+                  Selecione o proprietário do veículo
+                  consignado.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() =>
+                  setMostrarCadastroCliente(
+                    (mostrar) => !mostrar,
+                  )
+                }
+              >
+                {mostrarCadastroCliente
+                  ? "Cancelar cadastro"
+                  : "+ Novo proprietário"}
+              </button>
+            </div>
+
+            <label className="form-field">
+              <span>Proprietário *</span>
+
+              <select
+                value={formulario.id_proprietario}
+                onChange={(event) =>
+                  atualizarCampo(
+                    "id_proprietario",
+                    event.target.value,
+                  )
+                }
+                required
+              >
+                <option value="">Selecione...</option>
+
+                {clientes.map((cliente) => (
+                  <option
+                    key={cliente.id_cliente}
+                    value={cliente.id_cliente}
+                  >
+                    {cliente.nome_razao_social}
+
+                    {cliente.cpf
+                      ? ` — CPF ${cliente.cpf}`
+                      : ""}
+
+                    {cliente.cnpj
+                      ? ` — CNPJ ${cliente.cnpj}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {mostrarCadastroCliente && (
+              <div className="consignment-inline-card">
+                <h4>Cadastrar proprietário</h4>
+
+                <div className="form-grid">
+                  <label className="form-field">
+                    <span>Tipo de pessoa *</span>
+
+                    <select
+                      value={
+                        formularioCliente.tipo_pessoa
+                      }
+                      onChange={(event) =>
+                        atualizarCampoCliente(
+                          "tipo_pessoa",
+                          event.target.value as
+                            | "PF"
+                            | "PJ",
+                        )
+                      }
+                    >
+                      <option value="PF">
+                        Pessoa física
+                      </option>
+
+                      <option value="PJ">
+                        Pessoa jurídica
+                      </option>
+                    </select>
+                  </label>
+
+                  <label className="form-field">
+                    <span>
+                      {formularioCliente.tipo_pessoa ===
+                      "PF"
+                        ? "Nome completo *"
+                        : "Razão social *"}
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        formularioCliente.nome_razao_social
+                      }
+                      onChange={(event) =>
+                        atualizarCampoCliente(
+                          "nome_razao_social",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label className="form-field">
+                    <span>
+                      {formularioCliente.tipo_pessoa ===
+                      "PF"
+                        ? "CPF *"
+                        : "CNPJ *"}
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        formularioCliente.cpf_cnpj
+                      }
+                      onChange={(event) =>
+                        atualizarCampoCliente(
+                          "cpf_cnpj",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label className="form-field">
+                    <span>Telefone *</span>
+
+                    <input
+                      type="text"
+                      value={
+                        formularioCliente.telefone
+                      }
+                      onChange={(event) =>
+                        atualizarCampoCliente(
+                          "telefone",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label className="form-field full-width">
+                    <span>E-mail</span>
+
+                    <input
+                      type="email"
+                      value={formularioCliente.email}
+                      onChange={(event) =>
+                        atualizarCampoCliente(
+                          "email",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() =>
+                    void salvarNovoCliente()
+                  }
+                  disabled={salvandoCliente}
+                >
+                  {salvandoCliente
+                    ? "Salvando..."
+                    : "Cadastrar proprietário"}
+                </button>
+              </div>
+            )}
+          </section>
+
+
 
           <section className="consignment-section">
             <h3>Nota Fiscal de Entrada</h3>
@@ -1047,6 +1028,21 @@ export function ConsignacaoModal({
             <h3>Condições da consignação</h3>
 
             <div className="form-grid">
+<label className="form-field">
+                <span>Data de entrada *</span>
+
+                <input
+                  type="date"
+                  value={formulario.data_entrada}
+                  onChange={(event) =>
+                    atualizarCampo(
+                      "data_entrada",
+                      event.target.value,
+                    )
+                  }
+                  required
+                />
+              </label>
               <label className="form-field">
                 <span>
                   Valor de repasse acordado *
@@ -1067,36 +1063,6 @@ export function ConsignacaoModal({
                   placeholder="0,00"
                   required
                 />
-              </label>
-
-              <label className="form-field">
-                <span>
-                  Responsável pelas despesas *
-                </span>
-
-                <select
-                  value={
-                    formulario.responsavel_despesas
-                  }
-                  onChange={(event) =>
-                    atualizarCampo(
-                      "responsavel_despesas",
-                      event.target.value,
-                    )
-                  }
-                  required
-                >
-                  <option value="">Selecione...</option>
-                  <option value="Revenda">
-                    Revenda
-                  </option>
-                  <option value="Proprietário">
-                    Proprietário
-                  </option>
-                  <option value="Desconto no repasse">
-                    Desconto no repasse
-                  </option>
-                </select>
               </label>
 
               <label className="form-field">
@@ -1135,6 +1101,7 @@ export function ConsignacaoModal({
               />
             </label>
           </section>
+          </section>
         </form>
 
         <footer className="modal-footer">
@@ -1147,7 +1114,8 @@ export function ConsignacaoModal({
             Cancelar
           </button>
 
-          <button
+          {entradaAbas.etapa===1&&<button type="button" className="button button-secondary" disabled={salvando} onClick={()=>entradaAbas.setEtapa(0)}>Anterior</button>}
+          {entradaAbas.etapa===0?<button type="button" form="formulario-consignacao" className="button button-primary" disabled={salvando} onClick={e=>entradaAbas.proxima(e.currentTarget)}>Próxima</button>:<button
             type="submit"
             form="formulario-consignacao"
             className="button button-primary"
@@ -1156,7 +1124,7 @@ export function ConsignacaoModal({
             {salvando
               ? "Salvando..."
               : "Registrar consignação"}
-          </button>
+          </button>}
         </footer>
       </section>
     </div>

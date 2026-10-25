@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . "/../config/Cnpj.php";
+
 require_once __DIR__ . "/../models/Fornecedor.php";
 
 final class FornecedorController
@@ -186,11 +188,7 @@ final class FornecedorController
             (string) ($dados["cpf"] ?? "")
         );
 
-        $cnpj = (string) preg_replace(
-            "/\D/",
-            "",
-            (string) ($dados["cnpj"] ?? "")
-        );
+        $cnpj = Cnpj::normalizar((string) ($dados["cnpj"] ?? ""));
 
         if ($tipoPessoa === "PF" && strlen($cpf) !== 11) {
             $this->responderErro(
@@ -199,9 +197,9 @@ final class FornecedorController
             return null;
         }
 
-        if ($tipoPessoa === "PJ" && strlen($cnpj) !== 14) {
+        if ($tipoPessoa === "PJ" && !Cnpj::valido($cnpj)) {
             $this->responderErro(
-                "Informe um CNPJ com 14 números."
+                "CNPJ inválido. Informe 12 letras/números e 2 dígitos verificadores corretos."
             );
             return null;
         }

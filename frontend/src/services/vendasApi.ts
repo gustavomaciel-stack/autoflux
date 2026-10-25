@@ -1,3 +1,4 @@
+import { apiFetch } from "./authApi";
 import type {
   VeiculoVenda,
   VeiculoVendaApiResponse,
@@ -58,7 +59,7 @@ export async function listarVeiculosParaVenda(): Promise<VeiculoVenda[]> {
   let resposta: Response;
 
   try {
-    resposta = await fetch(API_URL, {
+    resposta = await apiFetch(API_URL, {
       method: "GET",
       headers: {
         Accept: "application/json",

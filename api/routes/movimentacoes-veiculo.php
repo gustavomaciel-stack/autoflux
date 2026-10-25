@@ -2,6 +2,19 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../config/Auth.php';
+try {
+    Auth::proteger();
+    $permissoesRota = ['GET'=>'veiculos.visualizar', 'POST'=>'veiculos.movimentar'];
+    $metodoPermissao = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (!isset($permissoesRota[$metodoPermissao])) Auth::responder(405, ['sucesso'=>false,'mensagem'=>'Método não permitido.']);
+    Auth::exigir($permissoesRota[$metodoPermissao]);
+
+} catch (Throwable $erro) {
+    Auth::responder(500, ['sucesso' => false, 'mensagem' => 'Não foi possível validar a sessão.']);
+}
+
+
 header(
     "Content-Type: application/json; charset=UTF-8"
 );
@@ -15,7 +28,7 @@ header(
 );
 
 header(
-    "Access-Control-Allow-Headers: Content-Type"
+    "Access-Control-Allow-Headers: Content-Type, X-CSRF-Token"
 );
 
 if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {

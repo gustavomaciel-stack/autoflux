@@ -1,0 +1,15 @@
+.cliente-dialog { border:0; padding:0; border-radius:14px; width:min(850px,calc(100vw - 32px)); max-height:90vh; color:#172033; box-shadow:0 24px 70px #17203333; }
+.cliente-dialog::backdrop { background:#17203388; }
+.cliente-dialog .modal-header { padding:20px 24px; }
+.cliente-dialog .modal-header h2 { margin:0; }
+.cliente-conteudo { padding:20px 24px; max-height:calc(90vh - 160px); overflow:auto; }
+.cliente-grupo { border:1px solid #d9e1ec; border-radius:10px; padding:16px; margin:0 0 18px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.cliente-grupo legend { font-weight:600; padding:0 6px; }
+.cliente-dialog .field { min-width:0; }
+.cliente-dialog .field input,.cliente-dialog .field select,.cliente-dialog .field textarea { width:100%; box-sizing:border-box; }
+.cliente-dialog .modal-footer { padding:16px 24px; display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #d9e1ec; }
+.clientes-filtros { display:flex; flex-wrap:wrap; align-items:end; gap:16px; margin-bottom:20px; }
+.clientes-filtros .field { flex:1 1 170px; margin-bottom:0; }
+.clientes-filtros .field select { height:44px; box-sizing:border-box; }
+.clientes-filtros > .button { height:44px; box-sizing:border-box; flex-shrink:0; }
+@media(max-width:600px) { .cliente-grupo { grid-template-columns:1fr; } .cliente-conteudo { padding:16px; } }

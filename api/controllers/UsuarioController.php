@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . "/../config/Percentual.php";
+
 final class UsuarioController
 {
     private Usuario $usuario;
@@ -495,19 +497,8 @@ final class UsuarioController
             $percentualComissao === null
         ) {
             $percentualComissao = null;
-        } elseif (
-            !is_numeric($percentualComissao) ||
-            (float) $percentualComissao < 0 ||
-            (float) $percentualComissao > 100
-        ) {
-            throw new InvalidArgumentException(
-                "O percentual de comissão deve estar entre 0 e 100."
-            );
         } else {
-            $percentualComissao = round(
-                (float) $percentualComissao,
-                2
-            );
+            $percentualComissao = Percentual::validar($percentualComissao, 'Comissão do vendedor');
         }
 
         return [

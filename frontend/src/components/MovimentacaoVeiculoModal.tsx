@@ -1,3 +1,4 @@
+import { Permissao } from "./Permissao";
 import {
   useEffect,
   useState,
@@ -309,7 +310,7 @@ export function MovimentacaoVeiculoModal({
               />
             </label>
 
-            <button
+            <Permissao codigo="veiculos.movimentar"><button
               className="button primary"
               type="submit"
               disabled={
@@ -321,7 +322,7 @@ export function MovimentacaoVeiculoModal({
               {salvando
                 ? "Atualizando..."
                 : "Registrar alteração"}
-            </button>
+            </button></Permissao>
 
             <h3 className="form-section-title">
               Histórico de situações

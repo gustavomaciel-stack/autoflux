@@ -1,0 +1,24 @@
+.user-area .session-action {
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #d4dbea;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.user-area .session-action:hover {
+  background: #1e6cf3;
+  color: #fff;
+}
+.user-area .session-action:focus-visible {
+  outline: 2px solid #8bb8ff;
+  outline-offset: 2px;
+}
+.user-area .session-action:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
