@@ -1,0 +1,20 @@
+
+.trade-history-workspace{background:#fff;border:1px solid #dfe7f2;border-radius:16px;padding:26px;min-width:0}
+.trade-history-workspace-heading h3{margin:0 0 7px;font-size:19px;color:#172d50}
+.trade-history-workspace-heading p{margin:0;color:#64748b;font-size:13px;line-height:1.6}
+.trade-history-workspace .trade-history-context-filter{max-width:620px;margin:22px 0}
+.trade-history-offer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:28px}
+.trade-history-offer-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;border:1px solid #e0e7f0;background:#fafcff;border-radius:12px;padding:18px}
+.trade-history-offer-card strong{color:#172d50;font-size:16px}.trade-history-offer-card small{display:block;color:#64748b;font-size:12px;line-height:1.5;margin-top:5px}
+.trade-history-status{align-self:start;font-size:11px;background:#e7f6ed;color:#137546;padding:5px 8px;border-radius:6px;white-space:nowrap}.trade-history-status.is-closed{background:#edf0f5;color:#64748b}
+.trade-history-offer-value{grid-column:1/-1;border-top:1px solid #e3eaf3;padding-top:12px}.trade-history-offer-value strong{display:block;font-size:22px;margin-top:5px}
+.trade-history-workspace .historico-cabecalho{border-top:1px solid #e5ebf3;padding-top:22px;margin-bottom:8px}.trade-history-workspace .historico-cabecalho h3{font-size:18px}
+.trade-history-workspace .historico-lista li{padding:20px 0;align-items:center}.trade-history-workspace .historico-lista li:last-child{border-bottom:0}
+.historico-evento-valor{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#64748b}.historico-evento-valor b{font-size:17px;color:#172d50}
+@media(max-width:650px){.trade-history-workspace{padding:16px}.trade-history-offer-grid{grid-template-columns:1fr}.trade-history-offer-card{padding:14px}.trade-history-workspace .historico-lista li{align-items:flex-start;flex-direction:column}.trade-history-workspace .historico-lista li>.button{align-self:flex-end}}
+
+/* Painel único: resumo e histórico pertencem ao mesmo conteúdo. */
+.trade-history-content{background:#fff;border:1px solid #dfe7f2;border-radius:16px;padding:26px;min-width:0}
+.trade-history-content>.trade-history-metrics{margin:0 0 26px;border:0;border-radius:12px;background:#f4f7fb;padding:20px 0}
+.trade-history-content>.trade-history-workspace{padding:0;border:0;border-radius:0;background:transparent}
+@media(max-width:650px){.trade-history-content{padding:16px}.trade-history-content>.trade-history-metrics{margin-bottom:22px}.trade-history-content>.trade-history-workspace{padding:0}}

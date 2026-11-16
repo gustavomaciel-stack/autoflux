@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../config/Auth.php';
+
 final class MovimentacaoVeiculoController
 {
     private MovimentacaoVeiculo $movimentacao;
@@ -10,7 +12,6 @@ final class MovimentacaoVeiculoController
         "Disponível",
         "Em preparação",
         "Em manutenção",
-        "Reservado",
         "Bloqueado",
     ];
 
@@ -126,12 +127,8 @@ final class MovimentacaoVeiculoController
                 );
             }
 
-            /*
-             * Temporário no MVP1.
-             * Quando houver autenticação, esse ID virá
-             * do usuário conectado.
-             */
-            $idUsuarioResponsavel = 1;
+            $usuario = Auth::usuario();
+            $idUsuarioResponsavel = (int) $usuario['id_usuario'];
 
             $idMovimentacao =
                 $this->movimentacao->registrar(

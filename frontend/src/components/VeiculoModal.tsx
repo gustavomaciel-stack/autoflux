@@ -1,3 +1,7 @@
+import {useIdentidadeEntrada} from './IdentidadeEntrada';
+import { createPortal } from "react-dom";
+import { FornecedorModal } from "./FornecedorModal";
+import {useAuth} from '../context/AuthContext';
 import { CadastroEntradaAbas, useCadastroEntradaAbas } from "./CadastroEntradaAbas";
 import {
   useEffect,
@@ -8,7 +12,6 @@ import {
 } from "react";
 import {
   atualizarVeiculo,
-  buscarVeiculoPorChassi,
   cadastrarVeiculo,
 } from "../services/veiculosApi";
 import { listarFornecedores } from "../services/fornecedoresApi";
@@ -114,6 +117,11 @@ export function VeiculoModal({
   aoFechar,
   aoSalvar,
 }: VeiculoModalProps) {
+  const {usuario, pode}=useAuth();
+  const [novoFornecedor, setNovoFornecedor] = useState(false);
+  useEffect(() => { if (!aberto) setNovoFornecedor(false); }, [aberto]);
+  const podeCorrigirChassi=usuario?.pode_corrigir_chassi===true;
+  const [motivoChassi,setMotivoChassi]=useState('');
   const [formulario, setFormulario] =
     useState<VeiculoFormData>(formularioVazio);
 
@@ -129,16 +137,14 @@ export function VeiculoModal({
   ] = useState(false);
 
   const [salvando, setSalvando] = useState(false);
-  const [pesquisandoChassi, setPesquisandoChassi] = useState(false);
-  const versaoPesquisaChassi = useRef(0);
-  const [avisoChassi, setAvisoChassi] = useState("");
-  const [chassiConferido, setChassiConferido] = useState("");
   const [erro, setErro] = useState("");
 
   const [aba, setAba] = useState<"dados" | "repasse">("dados");
 
   const entradaAbas = useCadastroEntradaAbas(aberto);
   const editando = veiculo !== null;
+  const identidade=useIdentidadeEntrada(formulario,aberto&&!editando,setFormulario);
+  const corrigiuChassi=!!veiculo&&formulario.chassi!==veiculo.chassi;
   const exibirDadosAquisicao =
     !editando || veiculo?.id_aquisicao !== null;
 
@@ -148,7 +154,7 @@ export function VeiculoModal({
     }
 
     setAba("dados");
-    versaoPesquisaChassi.current += 1;
+    setMotivoChassi('');
 
     setFormulario(
       veiculo
@@ -163,8 +169,6 @@ export function VeiculoModal({
     );
 
     setErro("");
-    setAvisoChassi("");
-    setChassiConferido("");
   }, [aberto, veiculo]);
 
   useEffect(() => {
@@ -234,60 +238,12 @@ export function VeiculoModal({
     }
 
     if (name === "chassi") {
-      versaoPesquisaChassi.current += 1;
-      setPesquisandoChassi(false);
-      setChassiConferido("");
-      setAvisoChassi("");
       setErro("");
     }
     setFormulario((formularioAtual) => ({ ...formularioAtual, [name]: valorTratado }));
   }
 
-  async function pesquisarChassi() {
-    const chassi = formulario.chassi.trim().toUpperCase();
-    if (chassi.length !== 17) {
-      setErro("Informe os 17 caracteres do chassi antes de pesquisar.");
-      return;
-    }
 
-    setPesquisandoChassi(true);
-    const versao = ++versaoPesquisaChassi.current;
-    setErro("");
-    setAvisoChassi("");
-    try {
-      const encontrado = await buscarVeiculoPorChassi(chassi);
-      if (versao !== versaoPesquisaChassi.current) return;
-
-      if (!encontrado) {
-        setAvisoChassi("Chassi não cadastrado. Confira os dados e prossiga com a nova entrada.");
-      } else if (encontrado.data_encerramento === null) {
-        setErro(`Este chassi já possui ciclo ativo (${encontrado.nosso_numero}). Confira o veículo no pátio.`);
-        return;
-      } else {
-        setFormulario((atual) => ({
-          ...atual,
-          marca: encontrado.marca,
-          modelo: encontrado.modelo,
-          versao: encontrado.versao ?? "",
-          ano_fabricacao: String(encontrado.ano_fabricacao),
-          ano_modelo: String(encontrado.ano_modelo),
-          combustivel: encontrado.combustivel,
-          placa: encontrado.placa,
-          observacoes: encontrado.observacoes ?? "",
-          cor: encontrado.cor,
-          renavam: encontrado.renavam ?? "",
-          // Dados da aquisição, NF e quilometragem desta entrada não são reaproveitados.
-        }));
-        setAvisoChassi(`Veículo localizado no ciclo ${encontrado.nosso_numero}. Confira os dados recuperados antes de continuar.`);
-      }
-      setChassiConferido(chassi);
-    } catch (falha) {
-      if (versao !== versaoPesquisaChassi.current) return;
-      setErro(falha instanceof Error ? falha.message : "Não foi possível pesquisar o chassi.");
-    } finally {
-      if (versao === versaoPesquisaChassi.current) setPesquisandoChassi(false);
-    }
-  }
 
   function alterarTipoOrigem(
     evento: ChangeEvent<HTMLSelectElement>,
@@ -317,12 +273,15 @@ export function VeiculoModal({
   ) {
     evento.preventDefault();
 
-    if (!editando && chassiConferido !== formulario.chassi) {
+    if (!editando && !identidade.pronto) {
       entradaAbas.setEtapa(0);
-      setErro("Pesquise o chassi antes de confirmar a aquisição.");
+      setErro("Confira o chassi e confirme o retorno, se houver cadastro anterior, antes de continuar.");
       return;
     }
 
+    if(corrigiuChassi&&(!podeCorrigirChassi||!motivoChassi.trim())){
+      setAba('dados');setErro(!podeCorrigirChassi?'Somente Gestão/Diretoria pode corrigir o chassi.':'Informe o motivo da correção do chassi.');return;
+    }
     setSalvando(true);
     setErro("");
 
@@ -330,10 +289,10 @@ export function VeiculoModal({
       if (veiculo) {
         await atualizarVeiculo(
           veiculo.id_veiculo,
-          formulario,
+          {...formulario,chassi_anterior:veiculo.chassi,motivo_correcao_chassi:motivoChassi.trim()},
         );
       } else {
-        await cadastrarVeiculo(formulario);
+        await cadastrarVeiculo({...formulario,confirmacao_retorno:identidade.confirmacao});
       }
 
       await aoSalvar();
@@ -397,7 +356,7 @@ export function VeiculoModal({
                 <span>{erro}</span>
               </div>
             )}
-            {avisoChassi && <div className="alert page-alert" role="status">{avisoChassi}</div>}
+
 
             <section id={entradaAbas.id+"-panel-0"} role={!editando?"tabpanel":undefined} aria-labelledby={!editando?entradaAbas.id+"-tab-0":undefined} data-etapa-entrada="0" hidden={!editando&&entradaAbas.etapa!==0}>
             <h3 className="form-section-title">
@@ -544,8 +503,8 @@ export function VeiculoModal({
                   onChange={atualizarCampo}
                   minLength={17}
                   maxLength={17}
-                  disabled={editando}
-                  required={!editando}
+                  disabled={salvando||(editando&&!podeCorrigirChassi)}
+                  required
                   aria-describedby={
                     editando
                       ? "aviso-edicao-chassi"
@@ -558,17 +517,14 @@ export function VeiculoModal({
                     id="aviso-edicao-chassi"
                     className="field-hint"
                   >
-                    O chassi é a identificação permanente do
-                    veículo. Sua correção exige tratamento
-                    específico.
+                    {podeCorrigirChassi?'Você pode corrigir um erro no chassi. A alteração exige motivo e ficará registrada no histórico, com o valor anterior e o responsável.':'A correção do chassi é exclusiva de Gestão/Diretoria.'}
                   </small>
                 )}
-                {!editando && (
-                  <button type="button" onClick={() => void pesquisarChassi()} disabled={pesquisandoChassi || salvando}>
-                    {pesquisandoChassi ? "Pesquisando..." : "Pesquisar chassi"}
-                  </button>
-                )}
+
               </label>
+              {!editando&&identidade.aviso}
+              {corrigiuChassi&&podeCorrigirChassi&&<label className="field field-full">Motivo da correção do chassi *<textarea name="motivo_correcao_chassi" required maxLength={1000} rows={2} value={motivoChassi} disabled={salvando} onChange={e=>setMotivoChassi(e.target.value)} placeholder="Ex.: erro de digitação identificado na conferência do documento"/><small className="field-hint">A correção mantém o mesmo veículo e os vínculos com seus ciclos, aquisições e documentos. O chassi anterior ficará no histórico.</small></label>}
+
             </div>
 
             <div className="form-grid">
@@ -690,9 +646,10 @@ export function VeiculoModal({
                 </label>
 
                 {tipoOrigemNota === "fornecedor" ? (
-                  <label className="field field-full">
-                    Fornecedor *
-                    <select
+                  <div className="field field-full">
+                    <label htmlFor="entrada-fornecedor">Fornecedor *</label>
+                    <div className="entrada-fornecedor-controles">
+                    <select id="entrada-fornecedor"
                       name="id_fornecedor_origem"
                       value={
                         formulario.id_fornecedor_origem
@@ -724,7 +681,9 @@ export function VeiculoModal({
                         ),
                       )}
                     </select>
-                  </label>
+                    {pode("fornecedores.cadastrar") && <button type="button" className="button primary entrada-fornecedor-adicionar" title="Cadastrar fornecedor" aria-label="Cadastrar fornecedor" onClick={() => setNovoFornecedor(true)}>+</button>}
+                    </div>
+                  </div>
                 ) : (
                   <label className="field field-full">
                     Nome do particular *
@@ -827,8 +786,8 @@ export function VeiculoModal({
             </section>
           </div>
 
-          <div className="modal-actions">
-            <button
+          <div data-ui-actions="navigation" className="modal-actions">
+            <button data-ui-nav="back"
               className="button secondary"
               type="button"
               onClick={aoFechar}
@@ -837,8 +796,8 @@ export function VeiculoModal({
               Cancelar
             </button>
 
-            {!editando&&entradaAbas.etapa===1&&<button type="button" className="button secondary" disabled={salvando} onClick={()=>entradaAbas.setEtapa(0)}>Anterior</button>}
-            {!editando&&entradaAbas.etapa===0?<button type="button" className="button primary" disabled={salvando} onClick={e=>entradaAbas.proxima(e.currentTarget)}>Próxima</button>:<button
+            {!editando&&entradaAbas.etapa===1&&<button data-ui-nav="back" type="button" className="button secondary" disabled={salvando} onClick={()=>entradaAbas.setEtapa(0)}>Anterior</button>}
+            {!editando&&entradaAbas.etapa===0?<button data-ui-nav="next" type="button" className="button primary" disabled={salvando||!identidade.pronto} onClick={e=>entradaAbas.proxima(e.currentTarget)}>Próxima</button>:<button
               className="button primary"
               type="submit"
               disabled={salvando}
@@ -858,6 +817,18 @@ export function VeiculoModal({
           </div>
         )}
       </section>
+      {novoFornecedor && createPortal(
+        <div className="entrada-fornecedor-modal">
+          <FornecedorModal aberto fornecedor={null}
+            aoFechar={() => setNovoFornecedor(false)}
+            aoSalvar={async () => {}}
+            aoCadastrar={(id, dados) => {
+              setFornecedores(atuais => [...atuais.filter(f => Number(f.id_fornecedor) !== id), {
+                ...dados, id_fornecedor: id, ativo: 1, data_cadastro: "", data_atualizacao: "",
+              }].sort((a, b) => a.razao_social_nome.localeCompare(b.razao_social_nome, "pt-BR")));
+              setFormulario(atual => ({...atual, id_fornecedor_origem: String(id)}));
+            }} />
+        </div>, document.body)}
     </div>
   );
 }

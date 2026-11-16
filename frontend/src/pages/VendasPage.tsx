@@ -1,6 +1,6 @@
 import { podeGerenciarOrcamentos } from "../services/clientesAcesso";
 import { useAuth } from "../context/AuthContext";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   listarVeiculosParaVenda,
   veiculoEstaDisponivel,
@@ -69,6 +69,13 @@ function obterClasseSituacao(situacao: string): string {
 export function VendasPage() {
  const { pode, usuario } = useAuth();
   const [veiculos, setVeiculos] = useState<VeiculoVenda[]>([]);
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [situacoes, setSituacoes] = useState<string[]>([]);
+  const [contadores, setContadores] = useState({total: 0, disponiveis: 0, bloqueados: 0});
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  const consultaAtual = useRef(0);
   const [busca, setBusca] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState("Todos");
   const [carregando, setCarregando] = useState(true);
@@ -86,13 +93,18 @@ export function VendasPage() {
   }, [veiculoDetalhes]);
 
   async function carregarVeiculos() {
+    const consulta = ++consultaAtual.current;
     setCarregando(true);
     setErro("");
 
     try {
-      const dados = await listarVeiculosParaVenda();
-      setVeiculos(dados);
+      const dados = await listarVeiculosParaVenda(pagina, buscaAplicada, filtroSituacao);
+      if (consulta !== consultaAtual.current) return;
+      setVeiculos(dados.itens);
+      setTotal(dados.total); setPaginas(dados.paginas); setPagina(dados.pagina);
+      setSituacoes(dados.situacoes); setContadores(dados.contadores);
     } catch (error) {
+      if (consulta !== consultaAtual.current) return;
       setVeiculos([]);
 
       setErro(
@@ -101,67 +113,20 @@ export function VendasPage() {
           : "Não foi possível carregar os veículos.",
       );
     } finally {
-      setCarregando(false);
+      if (consulta === consultaAtual.current) setCarregando(false);
     }
   }
 
   useEffect(() => {
     void carregarVeiculos();
-  }, []);
+    return () => { consultaAtual.current++; };
+  }, [pagina, buscaAplicada, filtroSituacao]);
 
-  const situacoes = useMemo(() => {
-    const valores = veiculos
-      .map((veiculo) => obterSituacao(veiculo))
-      .filter((situacao) => situacao !== "Não informada");
-
-    return Array.from(new Set(valores)).sort((a, b) =>
-      a.localeCompare(b, "pt-BR"),
-    );
-  }, [veiculos]);
-
-  const veiculosFiltrados = useMemo(() => {
-    const termo = normalizarTexto(busca);
-
-    return veiculos.filter((veiculo) => {
-      const situacao = obterSituacao(veiculo);
-
-      const correspondeSituacao =
-        filtroSituacao === "Todos" || situacao === filtroSituacao;
-
-      if (!correspondeSituacao) {
-        return false;
-      }
-
-      if (termo === "") {
-        return true;
-      }
-
-      const conteudoPesquisavel = [
-        veiculo.nosso_numero,
-        veiculo.placa,
-        veiculo.chassi,
-        veiculo.renavam,
-        veiculo.marca,
-        veiculo.modelo,
-        veiculo.versao,
-        veiculo.ano_fabricacao,
-        veiculo.ano_modelo,
-        veiculo.combustivel,
-        veiculo.cor,
-        situacao,
-      ]
-        .map((valor) => normalizarTexto(valor))
-        .join(" ");
-
-      return conteudoPesquisavel.includes(termo);
-    });
-  }, [busca, filtroSituacao, veiculos]);
-
-  const quantidadeDisponiveis = useMemo(() => {
-    return veiculos.filter((veiculo) => veiculoEstaDisponivel(veiculo)).length;
-  }, [veiculos]);
-
-  const quantidadeBloqueados = veiculos.length - quantidadeDisponiveis;
+  useEffect(() => {
+    if (busca.trim() === buscaAplicada) return;
+    const timer = window.setTimeout(() => {setBuscaAplicada(busca.trim()); setPagina(1);}, 250);
+    return () => window.clearTimeout(timer);
+  }, [busca, buscaAplicada]);
 
   function selecionarVeiculo(veiculo: VeiculoVenda) {
     setErro("");
@@ -210,17 +175,17 @@ export function VendasPage() {
       <section className="sales-summary">
         <article className="sales-summary-card">
           <span>Total no pátio</span>
-          <strong>{veiculos.length}</strong>
+          <strong>{contadores.total}</strong>
         </article>
 
         <article className="sales-summary-card sales-summary-card-success">
           <span>Disponíveis para venda</span>
-          <strong>{quantidadeDisponiveis}</strong>
+          <strong>{contadores.disponiveis}</strong>
         </article>
 
         <article className="sales-summary-card sales-summary-card-warning">
           <span>Venda bloqueada</span>
-          <strong>{quantidadeBloqueados}</strong>
+          <strong>{contadores.bloqueados}</strong>
         </article>
       </section>
 
@@ -241,7 +206,7 @@ export function VendasPage() {
 
           <select
             value={filtroSituacao}
-            onChange={(event) => setFiltroSituacao(event.target.value)}
+            onChange={(event) => {setFiltroSituacao(event.target.value); setPagina(1);}}
           >
             <option value="Todos">Todas</option>
 
@@ -289,14 +254,14 @@ export function VendasPage() {
                   Carregando veículos...
                 </td>
               </tr>
-            ) : veiculosFiltrados.length === 0 ? (
+            ) : veiculos.length === 0 ? (
               <tr>
                 <td colSpan={9} className="sales-empty">
                   Nenhum veículo encontrado.
                 </td>
               </tr>
             ) : (
-              veiculosFiltrados.map((veiculo) => {
+              veiculos.map((veiculo) => {
                 const disponivel = veiculoEstaDisponivel(veiculo);
                 const situacao = obterSituacao(veiculo);
 
@@ -367,6 +332,13 @@ export function VendasPage() {
           </tbody>
         </table>
       </div>
+      <nav className="orc-pagination" aria-label="Páginas de veículos para comercialização">
+        <span>Página {pagina} de {paginas} · {total} veículo(s) · 20 por página</span>
+        <div>
+          <button type="button" className="button secondary" disabled={carregando || pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
+          <button type="button" className="button secondary" disabled={carregando || pagina >= paginas} onClick={() => setPagina(pagina + 1)}>Próxima</button>
+        </div>
+      </nav>
       {veiculoDetalhes && (
         <div className="sales-modal-backdrop" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setVeiculoDetalhes(null);

@@ -108,7 +108,7 @@ try {
         exit;
     }
 
-    $controller->listar();
+    $controller->listar(isset($_GET['pagina']) ? $_GET : null);
 } catch (PDOException $erro) {
     http_response_code(500);
 

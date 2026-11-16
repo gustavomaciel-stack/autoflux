@@ -10,6 +10,13 @@ final class TrocaOrcamento
     public static function saldo(int $negociado, int $avaliacao, int $sinal): string {
         return Orcamento::moeda($negociado-$avaliacao-$sinal);
     }
+    public function buscarVeiculo(string $placa): ?array {
+        $placa=strtoupper(str_replace(['-',' '],'',$placa));
+        if(!preg_match('/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/',$placa)) throw new InvalidArgumentException('Informe uma placa válida para buscar.');
+        $itens=$this->executar('SELECT v.id_veiculo,v.marca,v.modelo,v.versao,v.ano_fabricacao ano,v.ano_modelo,v.placa,v.chassi,v.combustivel,c.renavam,c.cor,c.quilometragem_entrada quilometragem,c.nosso_numero,c.data_encerramento FROM veiculos v LEFT JOIN ciclos_veiculo c ON c.id_ciclo=(SELECT MAX(c2.id_ciclo) FROM ciclos_veiculo c2 WHERE c2.id_veiculo=v.id_veiculo) WHERE v.placa=? LIMIT 2',[$placa])->fetchAll(PDO::FETCH_ASSOC);
+        if(count($itens)>1) throw new DomainException('Mais de um cadastro usa esta placa. Confira os chassis antes de reaproveitar os dados.');
+        return $itens[0]??null;
+    }
     public function versao(int $id): string {
         $q=$this->executar('SELECT COALESCE(MAX(v.id_veiculo_entrada),0) oferta,COALESCE(MAX(a.id_avaliacao),0) avaliacao FROM veiculos_entrada v LEFT JOIN avaliacoes_veiculo_entrada a ON a.id_veiculo_entrada=v.id_veiculo_entrada WHERE v.id_orcamento=?',[$id])->fetch(PDO::FETCH_ASSOC);
         // Inclui retiradas, que não geram uma nova oferta/avaliação.
@@ -18,7 +25,7 @@ final class TrocaOrcamento
     }
     public function detalhes(int $id): array {
         $ofertas=$this->executar('SELECT v.*,u.nome responsavel,ue.nome responsavel_encerramento FROM veiculos_entrada v JOIN usuarios u ON u.id_usuario=v.id_usuario_responsavel LEFT JOIN usuarios ue ON ue.id_usuario=v.id_usuario_encerramento WHERE v.id_orcamento=? ORDER BY v.id_veiculo_entrada DESC',[$id])->fetchAll(PDO::FETCH_ASSOC);
-        $ativa=null;
+        $ativa=null;$ativas=[];$totalTrocas=0;
         foreach($ofertas as &$v){
             $v['avaliacoes']=$this->executar('SELECT a.*,u.nome responsavel FROM avaliacoes_veiculo_entrada a JOIN usuarios u ON u.id_usuario=a.id_usuario_avaliador WHERE a.id_veiculo_entrada=? ORDER BY a.id_avaliacao DESC',[$v['id_veiculo_entrada']])->fetchAll(PDO::FETCH_ASSOC);
             $v['avaliacao_vigente']=null;
@@ -28,9 +35,9 @@ final class TrocaOrcamento
                 $a['total_despesas']=Orcamento::moeda($total);
                 if((int)$a['vigente']===1)$v['avaliacao_vigente']=$a;
             }unset($a);
-            if((int)$v['ativo']===1)$ativa=$v;
+            if((int)$v['ativo']===1){$ativa=$v;$ativas[]=$v;$totalTrocas+=Orcamento::centavos($v['avaliacao_vigente']['valor_avaliado']??'0.00');}
         }unset($v);
-        return ['troca_ativa'=>$ativa,'trocas'=>$ofertas,'versao_troca'=>$this->versao($id),'valor_troca'=> $ativa['avaliacao_vigente']['valor_avaliado']??'0.00'];
+        return ['reserva_outro_orcamento'=>(new ReservaOrcamento($this->pdo))->reservaEmOutroOrcamento($id),'trocas_ativas'=>$ativas,'troca_ativa'=>$ativa,'trocas'=>$ofertas,'versao_troca'=>$this->versao($id),'valor_troca'=> Orcamento::moeda($totalTrocas)];
     }
     public function contexto(int $id): array {
         $o=$this->executar('SELECT o.id_orcamento,o.id_cliente,o.numero_orcamento,o.id_ciclo,o.situacao,o.valor_negociado_atual,o.data_validade,cli.nome_razao_social cliente,c.nosso_numero,c.origem_entrada,v.marca,v.modelo,v.placa FROM orcamentos o JOIN clientes cli ON cli.id_cliente=o.id_cliente JOIN ciclos_veiculo c ON c.id_ciclo=o.id_ciclo JOIN veiculos v ON v.id_veiculo=c.id_veiculo WHERE o.id_orcamento=?',[$id])->fetch(PDO::FETCH_ASSOC);
@@ -63,13 +70,13 @@ final class TrocaOrcamento
             else {$where.="($status)=?";$args[]=$situacao;}
         }
         $total=(int)$this->executar('SELECT COUNT(*)'.$base.$where,$args)->fetchColumn();
-        $paginas=max(1,(int)ceil($total/20));$pagina=min($pagina,$paginas);$offset=($pagina-1)*20;
-        $itens=$this->executar("SELECT v.id_veiculo_entrada,v.id_orcamento,v.marca,v.modelo,v.placa,v.ativo,($status) situacao,v.data_cadastro,v.data_encerramento,v.motivo_encerramento,o.numero_orcamento,o.situacao situacao_orcamento,cli.nome_razao_social cliente,c.nosso_numero,a.valor_avaliado".$base.' LEFT JOIN avaliacoes_veiculo_entrada a ON a.id_avaliacao=(SELECT MAX(av.id_avaliacao) FROM avaliacoes_veiculo_entrada av WHERE av.id_veiculo_entrada=v.id_veiculo_entrada) '.$where.' ORDER BY v.data_cadastro DESC,v.id_veiculo_entrada DESC LIMIT 20 OFFSET '.$offset,$args)->fetchAll(PDO::FETCH_ASSOC);
+        $paginas=max(1,(int)ceil($total/10));$pagina=min($pagina,$paginas);$offset=($pagina-1)*10;
+        $itens=$this->executar("SELECT v.id_veiculo_entrada,v.id_orcamento,v.marca,v.modelo,v.placa,v.ativo,($status) situacao,v.data_cadastro,v.data_encerramento,v.motivo_encerramento,o.numero_orcamento,o.situacao situacao_orcamento,cli.nome_razao_social cliente,c.nosso_numero,a.valor_avaliado".$base.' LEFT JOIN avaliacoes_veiculo_entrada a ON a.id_avaliacao=(SELECT MAX(av.id_avaliacao) FROM avaliacoes_veiculo_entrada av WHERE av.id_veiculo_entrada=v.id_veiculo_entrada) '.$where.' ORDER BY v.data_cadastro DESC,v.id_veiculo_entrada DESC LIMIT 10 OFFSET '.$offset,$args)->fetchAll(PDO::FETCH_ASSOC);
         return ['itens'=>$itens,'total'=>$total,'pagina'=>$pagina,'paginas'=>$paginas,'pendentes'=>(int)$r['pendentes'],'avaliados'=>(int)$r['avaliados'],'encerradas'=>(int)$r['encerradas'],'todas'=>(int)$r['total']];
     }
     public static function dadosOferta(array $d): array {
         $r=[];
-        foreach(['marca'=>50,'modelo'=>80,'versao'=>80,'cor'=>50,'combustivel'=>50,'observacoes'=>5000] as $campo=>$limite)$r[$campo]=Orcamento::texto($d[$campo]??'',$limite);
+        foreach(['marca'=>50,'modelo'=>80,'versao'=>80,'cor'=>50,'combustivel'=>50,'observacoes'=>5000,'proprietario_nome'=>150,'proprietario_documento'=>18] as $campo=>$limite)$r[$campo]=Orcamento::texto($d[$campo]??'',$limite);
         if($r['marca']===''||$r['modelo']==='')throw new InvalidArgumentException('Informe marca e modelo do veículo oferecido.');
         foreach(['ano','ano_modelo','quilometragem'] as $campo){
             $v=$d[$campo]??null;
@@ -94,20 +101,27 @@ final class TrocaOrcamento
     // Chamado dentro da transação do orçamento; ofertas anteriores são preservadas.
     public function registrarOferta(array $o,array $d,int $usuario): void {
         $r=self::dadosOferta($d);
-        $this->encerrarOferta((int)$o['id_orcamento'],$usuario,'Oferta substituída; dados anteriores preservados.');
-        $campos=['marca','modelo','versao','ano','ano_modelo','placa','quilometragem','chassi','renavam','cor','combustivel','valor_solicitado','observacoes'];
+        $id=(int)$o['id_orcamento'];
+        $anterior=null;
+        if(isset($d['id_veiculo_entrada'])){
+            $anterior=Orcamento::id($d['id_veiculo_entrada']);
+            $this->encerrarOferta($id,$usuario,'Oferta substituída; dados anteriores preservados.',$anterior);
+        }
+        if($this->executar('SELECT COUNT(*) FROM veiculos_entrada WHERE id_orcamento=? AND ativo=1 AND (placa=? OR (? IS NOT NULL AND chassi=?))',[$id,$r['placa'],$r['chassi']?:null,$r['chassi']])->fetchColumn())throw new DomainException('Este veículo já está ativo na troca deste orçamento.');
+        $campos=['marca','modelo','versao','ano','ano_modelo','placa','quilometragem','chassi','renavam','cor','combustivel','valor_solicitado','observacoes','proprietario_nome','proprietario_documento'];
         $args=[$o['id_orcamento'],$o['id_cliente'],$usuario];foreach($campos as $campo)$args[]=$r[$campo]===''?null:$r[$campo];
         $this->executar('INSERT INTO veiculos_entrada(id_orcamento,id_cliente,id_usuario_responsavel,'.implode(',',$campos).') VALUES('.implode(',',array_fill(0,count($args),'?')).')',$args);
     }
     // Executado somente pelo fluxo de criação que verifica Gestão pela sessão.
     public function avaliarNaCriacaoPeloGestor(int $id,mixed $valor,int $usuario): void {
         if(Orcamento::centavos($valor)<=0)throw new InvalidArgumentException('Informe um valor positivo para a avaliação da troca.');
-        $v=$this->executar('SELECT id_veiculo_entrada FROM veiculos_entrada WHERE orcamento_ativo=? FOR UPDATE',[$id])->fetch(PDO::FETCH_ASSOC);
+        $v=$this->executar('SELECT id_veiculo_entrada FROM veiculos_entrada WHERE id_orcamento=? AND ativo=1 ORDER BY id_veiculo_entrada DESC LIMIT 1 FOR UPDATE',[$id])->fetch(PDO::FETCH_ASSOC);
         if(!$v)throw new DomainException('Oferta de troca não encontrada.');
         $this->avaliar($id,['id_veiculo_entrada'=>$v['id_veiculo_entrada'],'valor_avaliado'=>$valor,'data_avaliacao'=>(new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d\TH:i'),'observacoes'=>'Avaliação registrada diretamente por Gestão/Diretoria no orçamento.','despesas'=>[]],$usuario);
     }
-    private function encerrarOferta(int $id,int $usuario,string $motivo): void {
-        $this->executar("UPDATE veiculos_entrada SET ativo=0,situacao='Cancelado',id_usuario_encerramento=?,motivo_encerramento=?,data_encerramento=CURRENT_TIMESTAMP WHERE id_orcamento=? AND ativo=1",[$usuario,$motivo,$id]);
+    private function encerrarOferta(int $id,int $usuario,string $motivo,int $oferta): void {
+        if(!$this->executar('SELECT id_veiculo_entrada FROM veiculos_entrada WHERE id_orcamento=? AND id_veiculo_entrada=? AND ativo=1 FOR UPDATE',[$id,$oferta])->fetchColumn())throw new DomainException('Oferta não está ativa neste orçamento.');
+        $this->executar("UPDATE veiculos_entrada SET ativo=0,situacao='Cancelado',id_usuario_encerramento=?,motivo_encerramento=?,data_encerramento=CURRENT_TIMESTAMP WHERE id_orcamento=? AND ativo=1 AND id_veiculo_entrada=?",[$usuario,$motivo,$id,$oferta]);
     }
     public function alterar(int $id,array $d,int $usuario,bool $gestor=false): void {
         $this->pdo->beginTransaction();try{
@@ -117,9 +131,13 @@ final class TrocaOrcamento
             // Mesmo ordenamento orçamento -> ciclo usado em reserva/cancelamento.
             $c=$this->executar('SELECT data_encerramento,situacao_atual FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE',[$o['id_ciclo']])->fetch(PDO::FETCH_ASSOC);
             if(!$c||$c['data_encerramento']!==null)throw new DomainException('O ciclo do veículo principal está encerrado.');
-            (new ReservaOrcamento($this->pdo))->conferirCiclo((int)$o['id_ciclo'],$id);
-            if(!is_string($d['versao_troca']??null)||$d['versao_troca']!==$this->versao($id))throw new DomainException('A oferta ou avaliação mudou. Atualize os detalhes antes de salvar.');
             $acao=$d['acao']??'';
+            // Encerrar uma oferta não disputa o veículo nem altera a reserva existente.
+            // A reserva de outra negociação continua bloqueando oferta/edição e avaliação.
+            if(!in_array($acao,['retirar','rejeitar'],true)) {
+                (new ReservaOrcamento($this->pdo))->conferirCiclo((int)$o['id_ciclo'],$id);
+            }
+            if(!is_string($d['versao_troca']??null)||$d['versao_troca']!==$this->versao($id))throw new DomainException('A oferta ou avaliação mudou. Atualize os detalhes antes de salvar.');
             if($acao==='ofertar'){
                 if(!$gestor&&array_key_exists('valor_avaliado',$d))throw new InvalidArgumentException('Somente Gestão/Diretoria pode avaliar diretamente a oferta.');
                 if($gestor)$d['valor_solicitado']='';
@@ -128,15 +146,14 @@ final class TrocaOrcamento
             }
             elseif(in_array($acao,['retirar','rejeitar'],true)){
                 $motivo=Orcamento::texto($d['justificativa']??'',$acao==='rejeitar'?4989:5000);if($motivo==='')throw new InvalidArgumentException('Informe o motivo da retirada da oferta.');
-                if(!$this->detalhes($id)['troca_ativa'])throw new DomainException('Não existe oferta ativa para retirar.');
-                $this->encerrarOferta($id,$usuario,$acao==='rejeitar'?'Rejeitada: '.$motivo:$motivo);
+                $this->encerrarOferta($id,$usuario,$acao==='rejeitar'?'Rejeitada: '.$motivo:$motivo,Orcamento::id($d['id_veiculo_entrada']??null));
             }elseif($acao==='avaliar')$this->avaliar($id,$d,$usuario);
             else throw new InvalidArgumentException('Ação de troca inválida.');
             $this->pdo->commit();
         }catch(Throwable $e){if($this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
     }
     private function avaliar(int $id,array $d,int $usuario): void {
-        $v=$this->executar('SELECT * FROM veiculos_entrada WHERE orcamento_ativo=? FOR UPDATE',[$id])->fetch(PDO::FETCH_ASSOC);
+        $v=$this->executar('SELECT * FROM veiculos_entrada WHERE id_orcamento=? AND id_veiculo_entrada=? AND ativo=1 FOR UPDATE',[$id,Orcamento::id($d['id_veiculo_entrada']??null)])->fetch(PDO::FETCH_ASSOC);
         if(!$v||Orcamento::id($d['id_veiculo_entrada']??null)!==(int)$v['id_veiculo_entrada'])throw new DomainException('A oferta foi retirada ou substituída. Atualize os detalhes.');
         $valor=Orcamento::centavos($d['valor_avaliado']??null);
         if($valor<=0)throw new InvalidArgumentException('Informe um valor positivo para a avaliação da troca.');

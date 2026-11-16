@@ -911,3 +911,11 @@ td small {
 
 /* O rodapé acompanha o conteúdo e não cobre controles ou históricos. */
 .app-footer { position: static; margin-top: 24px; }
+
+.sessao-inatividade {
+  width: min(420px, 90vw);
+}
+
+.sessao-inatividade h2 {
+  margin-top: 0;
+}

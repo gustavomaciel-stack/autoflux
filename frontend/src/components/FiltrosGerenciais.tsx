@@ -1,0 +1,9 @@
+import {type FormEvent} from 'react';
+import {type FiltrosGerenciais} from '../services/gerencialApi';
+export function FiltrosAnalise({valor,onChange,onSubmit,ocupado,semVendedor=false}:{valor:FiltrosGerenciais;onChange:(f:FiltrosGerenciais)=>void;onSubmit:()=>void;ocupado:boolean;semVendedor?:boolean}){
+ const campo=(key:keyof FiltrosGerenciais,v:string)=>onChange({...valor,[key]:v});
+ return <form className="ger-filtros" onSubmit={(e:FormEvent)=>{e.preventDefault();onSubmit();}}>
+  <div className="ger-filtros-principais"><label>De<input type="date" lang="pt-BR" value={valor.inicio} onChange={e=>campo('inicio',e.target.value)}/></label><label>Até<input type="date" lang="pt-BR" value={valor.fim} onChange={e=>campo('fim',e.target.value)}/></label><label className="ger-busca">Buscar veículo ou operação<input type="search" placeholder="Placa, veículo, número AF, pedido ou cliente" value={valor.busca} onChange={e=>campo('busca',e.target.value)}/></label><button className="button primary" type="submit" disabled={ocupado}>{ocupado?'Consultando…':'Aplicar filtros'}</button></div>
+  <details className="ger-filtros-extras"><summary>Mais filtros {Object.values({...valor,inicio:'',fim:'',busca:''}).some(Boolean)?'•':''}</summary><div><label>Modelo<input placeholder="Ex.: Onix" value={valor.modelo} onChange={e=>campo('modelo',e.target.value)}/></label><label>Ano de fabricação ou modelo<input inputMode="numeric" pattern="(19|20|21)[0-9]{2}" maxLength={4} placeholder="Ex.: 2020" value={valor.ano} onChange={e=>campo('ano',e.target.value)}/></label><label>Origem<select value={valor.origem} onChange={e=>campo('origem',e.target.value)}><option value="">Todas</option><option>Próprio</option><option>Consignado</option></select></label><label>Vendedor<input placeholder={semVendedor?'Não se aplica a esta análise':'Nome do vendedor'} disabled={semVendedor} value={valor.vendedor} onChange={e=>campo('vendedor',e.target.value)}/></label></div></details>
+ </form>;
+}

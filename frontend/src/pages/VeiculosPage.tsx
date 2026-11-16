@@ -3,7 +3,7 @@ import { Permissao } from "../components/Permissao";
 import {
   useCallback,
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react";
 import { CustosVeiculoModal } from "../components/CustosVeiculoModal";
@@ -20,13 +20,6 @@ const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
 });
 
 const formatadorNumero = new Intl.NumberFormat("pt-BR");
-
-function normalizarTexto(valor: unknown): string {
-  return String(valor ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
-}
 
 function formatarData(data: string | null): string {
   if (!data) {
@@ -80,6 +73,11 @@ export function VeiculosPage() {
   const { pode } = useAuth();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [busca, setBusca] = useState("");
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [paginas, setPaginas] = useState(1);
+  const ultimaConsulta = useRef(0);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
@@ -112,26 +110,42 @@ export function VeiculosPage() {
     useState<Veiculo | null>(null);
 
   const carregar = useCallback(async () => {
+    const consulta = ++ultimaConsulta.current;
     setCarregando(true);
     setErro("");
 
     try {
-      const dados = await listarVeiculos();
-      setVeiculos(dados);
+      const dados = await listarVeiculos(pagina, buscaAplicada);
+      if (consulta !== ultimaConsulta.current) return;
+      setVeiculos(dados.itens);
+      setTotal(dados.total);
+      setPaginas(dados.paginas);
+      setPagina(dados.pagina);
     } catch (falha) {
+      if (consulta !== ultimaConsulta.current) return;
       setErro(
         falha instanceof Error
           ? falha.message
           : "Não foi possível carregar os veículos.",
       );
     } finally {
-      setCarregando(false);
+      if (consulta === ultimaConsulta.current) setCarregando(false);
     }
-  }, []);
+  }, [pagina, buscaAplicada]);
 
   useEffect(() => {
     void carregar();
+    return () => { ultimaConsulta.current++; };
   }, [carregar]);
+
+  useEffect(() => {
+    if (busca.trim() === buscaAplicada) return;
+    const timer = window.setTimeout(() => {
+      setBuscaAplicada(busca.trim());
+      setPagina(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [busca, buscaAplicada]);
 
   useEffect(() => {
     if (!sucesso) {
@@ -146,34 +160,6 @@ export function VeiculosPage() {
       window.clearTimeout(temporizador);
     };
   }, [sucesso]);
-
-  const veiculosFiltrados = useMemo(() => {
-    const termo = normalizarTexto(busca.trim());
-
-    if (!termo) {
-      return veiculos;
-    }
-
-    return veiculos.filter((veiculo) =>
-      [
-        veiculo.nosso_numero,
-        veiculo.marca,
-        veiculo.modelo,
-        veiculo.versao,
-        veiculo.placa,
-        veiculo.chassi,
-        veiculo.renavam,
-        veiculo.combustivel,
-        veiculo.cor,
-        veiculo.status,
-        veiculo.numero_nota,
-        veiculo.serie,
-        veiculo.nome_fornecedor_nf,
-      ].some((valor) =>
-        normalizarTexto(valor).includes(termo),
-      ),
-    );
-  }, [busca, veiculos]);
 
   function abrirCadastro() {
     setSucesso("");
@@ -195,7 +181,8 @@ export function VeiculosPage() {
   async function veiculoSalvo() {
     const estavaEditando = veiculoEmEdicao !== null;
 
-    await carregar();
+    if (!estavaEditando && pagina !== 1) setPagina(1);
+    else await carregar();
 
     setSucesso(
       estavaEditando
@@ -249,9 +236,7 @@ export function VeiculosPage() {
           <input
             type="search"
             value={busca}
-            onChange={(evento) =>
-              setBusca(evento.target.value)
-            }
+            onChange={(evento) => setBusca(evento.target.value)}
             placeholder="Buscar por nosso número, marca, modelo, placa, chassi ou situação"
           />
         </label>
@@ -315,7 +300,7 @@ export function VeiculosPage() {
                     Carregando veículos...
                   </td>
                 </tr>
-              ) : veiculosFiltrados.length === 0 ? (
+              ) : veiculos.length === 0 ? (
                 <tr>
                   <td
                     colSpan={10}
@@ -325,12 +310,12 @@ export function VeiculosPage() {
                   </td>
                 </tr>
               ) : (
-                veiculosFiltrados.map((veiculo) => (
+                veiculos.map((veiculo) => (
                   <tr key={veiculo.id_ciclo}>
                     <td className="document">
                       <strong>
                         {veiculo.nosso_numero}
-                      </strong>
+                      </strong>{veiculo.origem_movimento&&<small>{veiculo.origem_movimento}</small>}
                     </td>
 
                     <td>
@@ -446,6 +431,14 @@ export function VeiculosPage() {
           </table>
         </div>
       </section>
+
+      <nav className="orc-pagination" aria-label="Páginas do pátio">
+        <span>Página {pagina} de {paginas} · {total} veículo(s) · 20 por página</span>
+        <div>
+          <button type="button" className="button secondary" disabled={carregando || pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
+          <button type="button" className="button secondary" disabled={carregando || pagina >= paginas} onClick={() => setPagina(pagina + 1)}>Próxima</button>
+        </div>
+      </nav>
 
       <VeiculoModal
         aberto={modalAberto}

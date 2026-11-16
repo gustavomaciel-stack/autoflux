@@ -1,10 +1,9 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useState } from 'react';
+import { FiltrosNotas, PaginacaoNotas, SituacaoNota, useConsultaNotas } from '../components/ConsultaNotasFiscais';
+import { AnexosNotaFiscal } from "../components/AnexosNotaFiscal";
 import { Layout } from "../components/Layout";
+import { useAuth } from "../context/AuthContext";
+import { NotasSaidaLista } from "../components/NotasSaidaLista";
 import { listarNotasFiscaisEntrada } from "../services/notasFiscaisEntradaApi";
 import type { NotaFiscalEntrada } from "../types/NotaFiscalEntrada";
 
@@ -65,93 +64,38 @@ function numeroCompleto(
 }
 
 export function NotasFiscaisEntradaPage() {
-  const [notas, setNotas] =
-    useState<NotaFiscalEntrada[]>([]);
+  const { pode } = useAuth();
+  const podeVerEntrada = pode("notas.visualizar");
+  const [aba, setAba] = useState<"entrada" | "saida">(podeVerEntrada ? "entrada" : "saida");
+  const [ciclo, setCiclo] = useState<number>();
+  const podeVerSaida = pode("notas.saida.visualizar");
+  function trocarAba(destino: "entrada" | "saida", idCiclo?: number) {
+    aplicar({});
+    setCiclo(idCiclo);
+    setAba(destino);
+  }
 
-  const [busca, setBusca] = useState("");
-  const [carregando, setCarregando] =
-    useState(true);
-  const [erro, setErro] = useState("");
-
-  const [notaSelecionada, setNotaSelecionada] =
-    useState<NotaFiscalEntrada | null>(null);
-
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    setErro("");
-
-    try {
-      const dados =
-        await listarNotasFiscaisEntrada();
-
-      setNotas(dados);
-    } catch (falha) {
-      setErro(
-        falha instanceof Error
-          ? falha.message
-          : "Não foi possível carregar as notas fiscais.",
-      );
-    } finally {
-      setCarregando(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void carregar();
-  }, [carregar]);
-
-  const notasFiltradas = useMemo(() => {
-    const termo = busca
-      .trim()
-      .toLocaleLowerCase("pt-BR");
-
-    if (!termo) {
-      return notas;
-    }
-
-    return notas.filter((nota) =>
-      [
-        nota.numero_nota,
-        nota.serie,
-        nota.nome_origem,
-        nota.tipo_origem,
-        nota.marca,
-        nota.modelo,
-        nota.versao,
-        nota.placa,
-        nota.chassi,
-        nota.nosso_numero,
-        nota.descricao_item,
-      ].some((valor) =>
-        String(valor ?? "")
-          .toLocaleLowerCase("pt-BR")
-          .includes(termo),
-      ),
-    );
-  }, [busca, notas]);
+  const { resultado, carregando, erro, aplicar, setPagina, atualizar } =
+    useConsultaNotas(listarNotasFiscaisEntrada, ciclo, podeVerEntrada && aba === "entrada");
+  const [notaSelecionada, setNotaSelecionada] = useState<NotaFiscalEntrada | null>(null);
 
   return (
     <Layout>
       <div className="breadcrumb">
         <span>Veículos</span>
         <span>/</span>
-        <strong>Notas Fiscais de Entrada</strong>
+        <strong>Notas fiscais</strong>
       </div>
 
-      <div className="page-toolbar">
-        <label className="search-box">
-          <span aria-hidden="true">⌕</span>
-
-          <input
-            type="search"
-            value={busca}
-            onChange={(evento) =>
-              setBusca(evento.target.value)
-            }
-            placeholder="Buscar por nota, origem, veículo, placa ou nosso número"
-          />
-        </label>
+      <div className="pedido-tabs" role="group" aria-label="Tipo de nota fiscal">
+        {podeVerEntrada && <button type="button" aria-pressed={aba === "entrada"} onClick={() => trocarAba("entrada", ciclo)}>Entrada</button>}
+        {podeVerSaida && <button type="button" aria-pressed={aba === "saida"} onClick={() => trocarAba("saida", ciclo)}>Saída</button>}
       </div>
+
+      {podeVerSaida && aba === "saida" ? <NotasSaidaLista ciclo={ciclo} limparCiclo={() => setCiclo(undefined)} verEntrada={podeVerEntrada ? id => trocarAba("entrada", id) : undefined} /> : <>
+      <FiltrosNotas onAplicar={aplicar} />
+
+      {ciclo && <button type="button" className="button secondary" onClick={() => { setPagina(1); setCiclo(undefined); }}>Mostrar todos os ciclos</button>}
 
       {erro && (
         <div className="alert error page-alert">
@@ -159,7 +103,7 @@ export function NotasFiscaisEntradaPage() {
 
           <button
             type="button"
-            onClick={() => void carregar()}
+            onClick={atualizar}
           >
             Tentar novamente
           </button>
@@ -196,7 +140,7 @@ export function NotasFiscaisEntradaPage() {
                     Carregando notas fiscais...
                   </td>
                 </tr>
-              ) : notasFiltradas.length === 0 ? (
+              ) : resultado.itens.length === 0 ? (
                 <tr>
                   <td
                     colSpan={9}
@@ -206,7 +150,7 @@ export function NotasFiscaisEntradaPage() {
                   </td>
                 </tr>
               ) : (
-                notasFiltradas.map((nota) => (
+                resultado.itens.map((nota) => (
                   <tr
                     key={
                       nota.id_nota_fiscal_entrada
@@ -267,9 +211,7 @@ export function NotasFiscaisEntradaPage() {
                     </td>
 
                     <td>
-                      <span className="status active">
-                        {nota.situacao_atual}
-                      </span>
+                      <SituacaoNota situacao={nota.situacao_atual} />
                     </td>
 
                     <td>
@@ -282,6 +224,7 @@ export function NotasFiscaisEntradaPage() {
                         >
                           Ver detalhes
                         </button>
+                        {podeVerSaida && <button type="button" onClick={() => trocarAba("saida", Number(nota.id_ciclo))}>Ver nota de saída</button>}
                       </div>
                     </td>
                   </tr>
@@ -292,6 +235,8 @@ export function NotasFiscaisEntradaPage() {
         </div>
       </section>
 
+      <PaginacaoNotas resultado={resultado} carregando={carregando} onPagina={setPagina} />
+      </>}
       {notaSelecionada && (
         <div className="modal-backdrop">
           <section
@@ -326,6 +271,7 @@ export function NotasFiscaisEntradaPage() {
               }
             >
               <div className="modal-body">
+                <AnexosNotaFiscal key={notaSelecionada.id_nota_fiscal_entrada} nota={notaSelecionada.id_nota_fiscal_entrada} />
                 <h3 className="form-section-title">
                   Dados da nota fiscal
                 </h3>

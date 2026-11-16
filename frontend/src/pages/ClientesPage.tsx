@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { ClienteModal } from '../components/ClienteModal';
 import { useAuth } from '../context/AuthContext';
-import { podeGerenciarClientes } from '../services/clientesAcesso';
+import { podeGerenciarClientes, podeConsultarHistoricoCliente } from '../services/clientesAcesso';
 import { alterarSituacaoCliente, listarCadastroClientes } from '../services/clientesApi';
 import type { Cliente } from '../types/Cliente';
 
@@ -74,7 +74,7 @@ export function ClientesPage() {
         {carregando ? <tr><td colSpan={7} className="empty-state">Carregando clientes...</td></tr> : !filtrados.length ? <tr><td colSpan={7} className="empty-state">Nenhum cliente encontrado.</td></tr> : filtrados.map(c => <tr key={c.id_cliente}>
           <td><strong>{c.nome_razao_social}</strong>{c.nome_fantasia && <small>{c.nome_fantasia}</small>}</td><td>{documento(c)}</td><td>{c.tipo_pessoa === 'PF' ? 'Pessoa física' : 'Pessoa jurídica'}</td><td>{c.telefone}<small>{c.email}</small></td><td>{[c.cidade,c.estado].filter(Boolean).join(' / ') || '—'}</td>
           <td><span className={`status ${Number(c.ativo) === 1 ? 'active' : 'inactive'}`}>{Number(c.ativo) === 1 ? 'Ativo' : 'Inativo'}</span></td>
-          <td><div className="row-actions"><button type="button" disabled={!pode('clientes.editar') || alterando !== null} onClick={() => { setEdicao(c); setModal(true); setSucesso(''); }}>Editar</button><button type="button" disabled={!pode('clientes.editar') || alterando !== null} onClick={() => void alternar(c)}>{alterando === c.id_cliente ? 'Salvando...' : Number(c.ativo) === 1 ? 'Inativar' : 'Reativar'}</button></div></td>
+          <td><div className="row-actions">{podeConsultarHistoricoCliente(usuario) && <button type="button" onClick={() => { sessionStorage.setItem("autoflux_historico_cliente", String(c.id_cliente)); window.location.hash = "#historico-clientes"; }}>Ver histórico</button>}<button type="button" disabled={!pode('clientes.editar') || alterando !== null} onClick={() => { setEdicao(c); setModal(true); setSucesso(''); }}>Editar</button><button type="button" disabled={!pode('clientes.editar') || alterando !== null} onClick={() => void alternar(c)}>{alterando === c.id_cliente ? 'Salvando...' : Number(c.ativo) === 1 ? 'Inativar' : 'Reativar'}</button></div></td>
         </tr>)}
       </tbody></table></div></section>
       {modal && <ClienteModal cliente={edicao} aoFechar={() => setModal(false)} aoSalvar={salvo} />}

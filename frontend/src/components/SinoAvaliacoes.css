@@ -1,0 +1,62 @@
+.sino-avaliacoes summary:focus-visible { outline: 3px solid #83adff; outline-offset: 2px; }
+.sino-avaliacoes { position: relative; }
+.sino-avaliacoes summary {
+  display: grid;
+  position: relative;
+  place-items: center;
+  width: 37px;
+  height: 37px;
+  color: #b8c8df;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+}
+.sino-avaliacoes summary:hover,
+.sino-avaliacoes[open] summary {
+  color: #fff;
+  background: rgb(255 255 255 / 9%);
+}
+.sino-avaliacoes summary::-webkit-details-marker { display: none; }
+.sino-contador {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 19px;
+  padding: 2px 4px;
+  border-radius: 10px;
+  background: #1855bf;
+  color: #fff;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sino-lista {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(315px, calc(100vw - 30px));
+  padding: 14px;
+  border: 1px solid #dce5f1;
+  border-radius: 10px;
+  background: #fff;
+  color: #172b4d;
+  box-shadow: 0 8px 24px #172b4d30;
+}
+.sino-lista ul { padding: 0; margin: 8px 0; list-style: none; max-height: 50vh; overflow: auto; }
+.sino-lista li button { width: 100%; text-align: left; }
+.sino-lista button { padding: 8px; border: 1px solid #e5edf8; border-radius: 6px; background: #fff; color: inherit; cursor: pointer; }
+.sino-lista button:hover:not(:disabled) { background: #f1f6ff; }
+.sino-lista button:disabled { opacity: .5; cursor: default; }
+.sino-lista small { display: block; margin-top: 3px; }
+.sino-paginacao { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+@media (max-width: 700px) {
+  .sino-lista { position: fixed; top: auto; right: 12px; margin-top: 8px; width: min(315px, calc(100vw - 24px)); }
+}
+.sino-lista .sino-resumo { margin: 5px 0 10px; font-size: 12px; color: #63758e; }
+.sino-lista li .sino-nova { border-left: 3px solid #2164ef; background: #f3f7ff; }
+.sino-lista li .sino-vista { color: #63758e; background: #f8fafc; border-color: #edf1f6; }
+.sino-lista li .sino-vista strong { font-weight: 500; }
+.sino-lista li .sino-vista:hover { color: #172b4d; background: #eef3f9; }

@@ -12,7 +12,10 @@ try {
     $consultaParaDespesas = $metodoPermissao === 'GET'
         && Auth::permite('custos.visualizar')
         && Auth::permite('despesas.visualizar');
-    if (!$consultaParaDespesas) Auth::exigir($permissoesRota[$metodoPermissao]);
+    $cadastroPelaDespesa = $metodoPermissao === 'POST'
+        && ($_GET['origem'] ?? '') === 'despesa'
+        && Auth::permite('despesas.cadastrar');
+    if (!$consultaParaDespesas && !$cadastroPelaDespesa) Auth::exigir($permissoesRota[$metodoPermissao]);
 
 } catch (Throwable $erro) {
     Auth::responder(500, ['sucesso' => false, 'mensagem' => 'Não foi possível validar a sessão.']);

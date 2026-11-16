@@ -127,3 +127,90 @@
 .orc-pagination > div { display:flex; gap:10px; }
 .orc-pagination button:disabled { opacity:.45; cursor:default; }
 @media(max-width:600px) { .orc-pagination { flex-direction:column; align-items:stretch; } .orc-pagination > div { justify-content:space-between; } }
+
+.comercial-dialog .comercial-dialog-header {
+  padding-block: 12px;
+}
+.comercial-dialog .comercial-dialog-header h2 {
+  font-size: 18px;
+}
+.comercial-dialog .comercial-analysis {
+  padding-block: 10px 16px;
+  font-size: 14px;
+}
+.comercial-dialog .comercial-analysis > .orc-tabs {
+  margin: 0 0 14px;
+  padding: 0;
+}
+.comercial-dialog .comercial-analysis > .orc-tabs button {
+  padding: 9px 12px;
+  font-size: 13px;
+}
+.comercial-dialog #analise-panel-condicao > h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.comercial-dialog #analise-panel-condicao > .orc-heading {
+  margin: 6px 0 10px;
+}
+.comercial-dialog #analise-panel-condicao > p,
+.comercial-dialog #analise-panel-condicao > div > p {
+  margin-block: 6px;
+}
+.comercial-dialog #analise-panel-condicao > .comercial-decision-summary {
+  gap: 8px;
+  margin-block: 12px;
+}
+.comercial-dialog #analise-panel-condicao > .comercial-decision-summary > div {
+  padding: 9px 12px;
+  font-size: 12px;
+}
+.comercial-dialog #analise-panel-condicao > .comercial-decision-summary strong {
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.orc-filters > .orc-expired-filter {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-self: start;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  background: #f7faff;
+  color: #172b4d;
+  cursor: pointer;
+}
+.orc-expired-filter:has(input:checked) {
+  border-color: #86afff;
+  background: #edf4ff;
+}
+.orc-expired-filter > input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #1769f4;
+}
+.orc-expired-filter small {
+  display: block;
+  margin-top: 2px;
+  color: #526179;
+}
+
+.proposta-detail-main .orc-ordered-footer {
+  justify-content: space-between;
+}
+.orc-ordered-footer .orc-footer-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.orc-ordered-footer .orc-footer-group + .orc-footer-group {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+@media (max-width: 520px) {
+  .orc-ordered-footer .orc-footer-group { width: 100%; }
+}

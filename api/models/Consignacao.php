@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__.'/ReservaOrcamento.php';
 
+require_once __DIR__.'/IdentidadeVeiculoEntrada.php';
+
 final class Consignacao
 {
     private PDO $conexao;
@@ -98,7 +100,7 @@ final class Consignacao
         }
     }
 
-    public function listar(): array
+    public function listar(int $pagina = 1, string $busca = '', string $situacao = 'Ativa'): array
     {
         $sql = "
             SELECT
@@ -161,12 +163,34 @@ final class Consignacao
                    co.id_nota_fiscal_entrada
             INNER JOIN usuarios u
                 ON u.id_usuario = co.id_usuario_responsavel
-            ORDER BY co.id_consignacao DESC
+
         ";
 
-        $consulta = $this->conexao->query($sql);
-
-        return $consulta->fetchAll(PDO::FETCH_ASSOC);
+        $sql = 'SELECT lista.* FROM (' . $sql . ') lista WHERE 1=1';
+        $parametros = [];
+        if ($situacao !== 'Todas') {
+            $sql .= ' AND lista.situacao = :situacao';
+            $parametros['situacao'] = $situacao;
+            if ($situacao === 'Ativa') $sql .= ' AND lista.data_encerramento IS NULL';
+        }
+        if ($busca !== '') {
+            $campos = ['nosso_numero','marca','modelo','versao','placa','chassi','nome_proprietario','cpf_proprietario','cnpj_proprietario','numero_nota','serie'];
+            $condicoes = [];
+            foreach ($campos as $i => $campo) {
+                $condicoes[] = "COALESCE(lista.$campo, '') LIKE :b$i ESCAPE '!'";
+                $parametros['b'.$i] = '%' . strtr($busca, ['!'=>'!!','%'=>'!%','_'=>'!_']) . '%';
+            }
+            $sql .= ' AND (' . implode(' OR ', $condicoes) . ')';
+        }
+        $contagem = $this->conexao->prepare('SELECT COUNT(*) FROM (' . $sql . ') resultados');
+        $contagem->execute($parametros);
+        $total = (int) $contagem->fetchColumn();
+        $paginas = max(1, (int) ceil($total / 20));
+        $pagina = max(1, min($pagina, $paginas));
+        $offset = ($pagina - 1) * 20;
+        $consulta = $this->conexao->prepare($sql . " ORDER BY lista.id_consignacao DESC LIMIT 20 OFFSET $offset");
+        $consulta->execute($parametros);
+        return ['itens'=>$consulta->fetchAll(PDO::FETCH_ASSOC), 'total'=>$total, 'pagina'=>$pagina, 'paginas'=>$paginas];
     }
 
     public function buscarPorId(
@@ -271,11 +295,6 @@ final class Consignacao
                 (int) $dados['id_usuario_responsavel']
             );
 
-            $this->validarDuplicidadeNota(
-                $dados['numero_nota'],
-                $dados['serie']
-            );
-
             $idVeiculo = $this->obterOuCadastrarVeiculo(
                 $dados
             );
@@ -340,7 +359,8 @@ final class Consignacao
         int $idConsignacao,
         int $idUsuarioResponsavel,
         string $dataSaida,
-        string $motivoSaida
+        string $motivoSaida,
+        array $notaSaida
     ): array {
         try {
             $this->conexao->beginTransaction();
@@ -361,8 +381,12 @@ final class Consignacao
                 );
             }
 
-            $bloqueio = $this->conexao->prepare('SELECT id_ciclo FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE');
+            $bloqueio = $this->conexao->prepare('SELECT id_ciclo,situacao_atual,data_encerramento FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE');
             $bloqueio->execute([$consignacao['id_ciclo']]);
+            $cicloAtual=$bloqueio->fetch(PDO::FETCH_ASSOC);
+            if (!$cicloAtual || $cicloAtual['data_encerramento']!==null || $cicloAtual['situacao_atual']==='Separado para venda') {
+                throw new InvalidArgumentException('O ciclo está encerrado ou possui pedido em andamento. Cancele o pedido antes de devolver.');
+            }
             if ((new ReservaOrcamento($this->conexao))->ativa((int)$consignacao['id_ciclo'])) {
                 throw new InvalidArgumentException('Libere a reserva no orçamento antes de devolver o consignado.');
             }
@@ -448,6 +472,10 @@ final class Consignacao
                 ':observacoes' => $motivoSaida,
             ]);
 
+            $nota = $this->conexao->prepare('INSERT INTO notas_fiscais_devolucao
+                (id_consignacao, numero_nota, serie, data_emissao, chave_acesso, caminho, nome_original, id_usuario)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $nota->execute([$idConsignacao, $notaSaida['numero'], $notaSaida['serie'], $notaSaida['data'], $notaSaida['chave'], $notaSaida['caminho'], $notaSaida['nome'], $idUsuarioResponsavel]);
             $this->conexao->commit();
 
             $consignacaoAtualizada =
@@ -515,40 +543,14 @@ final class Consignacao
         }
     }
 
-    private function validarDuplicidadeNota(
-        string $numeroNota,
-        string $serie
-    ): void {
-        $sql = "
-            SELECT id_nota_fiscal_entrada
-            FROM notas_fiscais_entrada
-            WHERE numero_nota = :numero_nota
-              AND serie = :serie
-            LIMIT 1
-        ";
-
-        $consulta = $this->conexao->prepare($sql);
-
-        $consulta->execute([
-            ':numero_nota' => $numeroNota,
-            ':serie' => $serie,
-        ]);
-
-        if ($consulta->fetch(PDO::FETCH_ASSOC) !== false) {
-            throw new InvalidArgumentException(
-                'Já existe uma Nota Fiscal de Entrada com este número e série.'
-            );
-        }
-    }
-
     private function obterOuCadastrarVeiculo(
         array $dados
     ): int {
         $sqlBusca = "
-            SELECT id_veiculo
+            SELECT id_veiculo, chassi, marca, modelo, versao, ano_fabricacao, ano_modelo, combustivel, placa
             FROM veiculos
             WHERE chassi = :chassi
-            LIMIT 1
+            LIMIT 1 FOR UPDATE
         ";
 
         $consultaBusca =
@@ -562,45 +564,8 @@ final class Consignacao
             $consultaBusca->fetch(PDO::FETCH_ASSOC);
 
         if ($veiculoExistente !== false) {
-            $idVeiculo =
-                (int) $veiculoExistente['id_veiculo'];
-
-            $sqlAtualizacao = "
-                UPDATE veiculos
-                SET
-                    marca = :marca,
-                    modelo = :modelo,
-                    versao = :versao,
-                    ano_fabricacao = :ano_fabricacao,
-                    ano_modelo = :ano_modelo,
-                    combustivel = :combustivel,
-                    placa = :placa,
-                    observacoes = :observacoes
-                WHERE id_veiculo = :id_veiculo
-            ";
-
-            $consultaAtualizacao =
-                $this->conexao->prepare(
-                    $sqlAtualizacao
-                );
-
-            $consultaAtualizacao->execute([
-                ':id_veiculo' => $idVeiculo,
-                ':marca' => $dados['marca'],
-                ':modelo' => $dados['modelo'],
-                ':versao' => $dados['versao'],
-                ':ano_fabricacao' =>
-                    $dados['ano_fabricacao'],
-                ':ano_modelo' =>
-                    $dados['ano_modelo'],
-                ':combustivel' =>
-                    $dados['combustivel'],
-                ':placa' => $dados['placa'],
-                ':observacoes' =>
-                    $dados['observacoes_veiculo'],
-            ]);
-
-            return $idVeiculo;
+            IdentidadeVeiculoEntrada::validar($this->conexao, $veiculoExistente, $dados);
+            return (int)$veiculoExistente['id_veiculo'];
         }
 
         $sqlCadastro = "
@@ -892,7 +857,7 @@ final class Consignacao
             ':id_usuario_responsavel' =>
                 $dados['id_usuario_responsavel'],
             ':observacoes' =>
-                'Entrada inicial do veículo consignado no pátio.',
+                IdentidadeVeiculoEntrada::descreverEntrada($dados, 'Entrada do veículo consignado no pátio.'),
         ]);
     }
 }

@@ -16,7 +16,9 @@ final class VeiculoController
         try {
             $this->responder(200, [
                 "sucesso" => true,
-                "dados" => $this->veiculo->listarTodos(),
+                "dados" => isset($_GET['pagina'])
+                    ? $this->veiculo->listarPaginado(max(1, (int) $_GET['pagina']), trim((string) ($_GET['busca'] ?? '')), trim((string) ($_GET['situacao'] ?? '')), isset($_GET['comercial']))
+                    : $this->veiculo->listarTodos(),
             ]);
         } catch (Throwable $erro) {
             $this->responder(500, [
@@ -130,7 +132,8 @@ final class VeiculoController
 
     public function atualizar(
         int $idVeiculo,
-        array $dados
+        array $dados,
+        ?array $usuario = null
     ): void {
         if ($idVeiculo <= 0) {
             $this->responder(422, [
@@ -166,9 +169,12 @@ final class VeiculoController
                     $possuiAquisicao
                 );
 
+            $dadosPreparados['motivo_correcao_chassi'] = $dados['motivo_correcao_chassi'] ?? '';
+            $dadosPreparados['chassi_anterior'] = $dados['chassi_anterior'] ?? null;
             $this->veiculo->atualizar(
                 $idVeiculo,
-                $dadosPreparados
+                $dadosPreparados,
+                $usuario
             );
 
             $this->responder(200, [
@@ -182,6 +188,10 @@ final class VeiculoController
             $this->responder(422, [
                 "sucesso" => false,
                 "mensagem" => $erro->getMessage(),
+            ]);
+        } catch (DomainException $erro) {
+            $this->responder($erro->getCode() === 403 ? 403 : 409, [
+                'sucesso' => false, 'mensagem' => $erro->getMessage(),
             ]);
         } catch (PDOException $erro) {
             if ($this->registroDuplicado($erro)) {
@@ -206,6 +216,11 @@ final class VeiculoController
                     "Não foi possível atualizar o veículo.",
             ]);
         }
+    }
+
+    public function prepararEntradaTroca(array $dados): array
+    {
+        return $this->prepararDados($dados, true);
     }
 
     private function prepararDados(
@@ -334,6 +349,7 @@ final class VeiculoController
         );
 
         $dadosPreparados = [
+            "confirmacao_retorno" => $dados["confirmacao_retorno"] ?? null,
             "marca" => $marca,
             "modelo" => $modelo,
             "versao" =>
@@ -358,8 +374,8 @@ final class VeiculoController
             "possui_aquisicao" =>
                 $exigirDadosAquisicao,
 
-            // Temporário no MVP1 enquanto não há login.
-            "id_usuario_responsavel" => 1,
+            // Responsavel obtido da sessao, nunca dos dados enviados pelo cliente.
+            "id_usuario_responsavel" => (int) Auth::usuario()["id_usuario"],
         ];
 
         if (!$incluirNotaFiscal) {

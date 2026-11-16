@@ -1,4 +1,5 @@
 export interface Veiculo {
+  possui_ciclo_ativo?: number | string;
   id_veiculo: number;
   marca: string;
   modelo: string;
@@ -15,6 +16,7 @@ export interface Veiculo {
   id_ciclo: number;
   nosso_numero: string;
   origem_entrada: string;
+  origem_movimento?: string | null;
   renavam: string | null;
   cor: string;
   quilometragem: number | null;
@@ -45,6 +47,9 @@ export interface Veiculo {
 }
 
 export interface VeiculoFormData {
+  confirmacao_retorno?: import("../components/IdentidadeEntrada").ConfirmacaoRetorno | null;
+  chassi_anterior?: string;
+  motivo_correcao_chassi?: string;
   marca: string;
   modelo: string;
   versao: string;

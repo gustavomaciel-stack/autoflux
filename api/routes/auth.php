@@ -12,10 +12,16 @@ try {
         if (empty($_SESSION['id_usuario'])) {
             Auth::responder(200, ['sucesso' => true, 'dados' => null, 'csrf' => $_SESSION['csrf']]);
         }
-        Auth::responder(200, ['sucesso' => true, 'dados' => Auth::usuario(), 'csrf' => $_SESSION['csrf']]);
+        Auth::responder(200, ['sucesso' => true, 'dados' => Auth::usuario(), 'segundos_restantes' => Auth::segundosRestantes(), 'csrf' => $_SESSION['csrf']]);
     }
     if ($metodo !== 'POST') {
         Auth::responder(405, ['sucesso' => false, 'mensagem' => 'Método não permitido.']);
+    }
+    if ($acao === 'atividade') {
+        Auth::usuario();
+        Auth::validarCsrf();
+        Auth::registrarAtividade();
+        Auth::responder(200, ['sucesso' => true, 'segundos_restantes' => Auth::segundosRestantes()]);
     }
     Auth::validarCsrf();
     $dados = json_decode(file_get_contents('php://input'), true);
@@ -34,8 +40,9 @@ try {
         }
         session_regenerate_id(true);
         $_SESSION['id_usuario'] = (int) $conta['id_usuario'];
+        Auth::registrarAtividade();
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
-        Auth::responder(200, ['sucesso' => true, 'dados' => Auth::usuario(), 'csrf' => $_SESSION['csrf']]);
+        Auth::responder(200, ['sucesso' => true, 'dados' => Auth::usuario(), 'segundos_restantes' => Auth::segundosRestantes(), 'csrf' => $_SESSION['csrf']]);
     }
     $usuario = Auth::usuario();
     if ($acao === 'sair') {

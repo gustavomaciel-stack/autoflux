@@ -48,3 +48,18 @@
 .proposta-detail-section-title{display:flex;align-items:center;gap:14px;margin:0 0 24px}.proposta-detail-section-title h3{margin:0;font-size:20px}.proposta-detail-section-title p{margin:7px 0 0;color:#7486a0;font-size:13px;line-height:1.6}.proposta-sidebar-note{font-size:12px;line-height:1.7;color:#825c17;background:#fff8e8;border-radius:10px;padding:12px;margin:16px 0 0}.proposta-detail-main .orc-table td{white-space:normal;min-width:95px}.proposta-detail-main .orc-table th{white-space:nowrap}.proposta-detail-main .orc-price-card .orc-summary>div{color:#627189}
 @media(max-width:800px){.proposta-detail-main .orc-detail-footer .button{width:auto}.proposta-detail-main .orc-detail-footer{display:flex;flex-wrap:wrap}.proposta-detail-main .orc-main-actions{grid-template-columns:unset}.proposta-detail-main .orc-detail-footer>.button:first-child{margin-right:0}}
 @media(max-width:520px){.proposta-detail-main .orc-tab-panel,.proposta-detail-main>div[role=tabpanel]{padding:20px 16px}.proposta-detail-main>form.orc-document-card{margin:16px;padding:16px}.proposta-detail-main .orc-detail-footer{padding:16px}.proposta-detail-main .orc-detail-footer .button{width:100%;text-align:center}.proposta-detail>.orc-heading h2{font-size:20px}}
+
+.proposta-trade-item{margin:16px 0;padding:16px;border:1px solid #e5edf8;border-radius:12px;background:#f8fafc}.proposta-trade-item .button{margin-top:12px}
+
+.proposta-client-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px}.proposta-client-heading label{font-size:inherit;color:inherit}.proposta-editor .proposta-new-client{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;height:30px;padding:0;border:1px solid #b9d2fb;border-radius:8px;background:#edf4ff;color:#0759d7;font-size:23px;font-weight:600;line-height:1;cursor:pointer}.proposta-editor .proposta-new-client:hover:not(:disabled){background:#dceaff;border-color:#1765f2}.proposta-editor .proposta-new-client:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}.proposta-editor .proposta-new-client:disabled{opacity:.5;cursor:not-allowed}
+
+/* Busca e cadastro na mesma linha, com os rótulos alinhados aos demais campos. */
+.proposta-client-input-row{display:flex;align-items:stretch;gap:10px;min-width:0}
+.proposta-client-input-row>input{flex:1 1 0;min-width:0;width:0!important}
+.proposta-editor .proposta-client-input-row>.proposta-new-client{flex:0 0 42px;width:42px;height:auto;min-height:44px;align-self:stretch;margin:0;font-size:24px}
+
+.proposta-trade-item > .button {
+  inline-size: 6rem;
+  padding-inline: 0.5rem;
+  justify-content: center;
+}

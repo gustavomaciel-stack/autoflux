@@ -133,7 +133,8 @@ try {
 
         $controller->atualizar(
             $idVeiculo,
-            $dados
+            $dados,
+            Auth::usuario()
         );
 
         exit;

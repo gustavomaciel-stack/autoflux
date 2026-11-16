@@ -28,7 +28,7 @@ final class HistoricoVeiculoController
         try {
             $historico =
                 $this->historicoVeiculo
-                    ->buscarPorVeiculo($idVeiculo);
+                    ->buscarPorVeiculo($idVeiculo, Auth::permite("pedidos.visualizar"));
 
             if ($historico === null) {
                 $this->responder(404, [

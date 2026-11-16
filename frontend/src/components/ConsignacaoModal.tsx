@@ -1,3 +1,4 @@
+import {useIdentidadeEntrada} from './IdentidadeEntrada';
 import { CadastroEntradaAbas, useCadastroEntradaAbas } from "./CadastroEntradaAbas";
 import { normalizarCnpj } from "../services/cnpj";
 import {
@@ -11,7 +12,6 @@ import {
   type CadastroCliente,
 } from "../services/clientesApi";
 import { cadastrarConsignacao } from "../services/consignacoesApi";
-import { buscarVeiculoPorChassi } from "../services/veiculosApi";
 import type { Cliente } from "../types/Cliente";
 import type {
   CadastroConsignacao,
@@ -87,7 +87,7 @@ function formularioInicial(): FormularioConsignacao {
     versao: "",
     ano_fabricacao: "",
     ano_modelo: "",
-    combustivel: "Flex",
+    combustivel: "",
     placa: "",
     chassi: "",
     renavam: "",
@@ -148,10 +148,6 @@ export function ConsignacaoModal({
   ] = useState(false);
 
   const [salvando, setSalvando] = useState(false);
-  const [pesquisandoChassi, setPesquisandoChassi] = useState(false);
-  const versaoPesquisaChassi = useRef(0);
-  const [chassiConferido, setChassiConferido] = useState("");
-  const [avisoChassi, setAvisoChassi] = useState("");
   const [salvandoCliente, setSalvandoCliente] =
     useState(false);
 
@@ -162,18 +158,17 @@ export function ConsignacaoModal({
 
   useEffect(() => {
     if (aberto) {
-      versaoPesquisaChassi.current += 1;
       setFormulario(formularioInicial());
       setFormularioCliente(
         formularioClienteInicial(),
       );
       setMostrarCadastroCliente(false);
       setErro("");
-      setChassiConferido("");
-      setAvisoChassi("");
       setMensagemCliente("");
     }
   }, [aberto]);
+
+  const identidade=useIdentidadeEntrada(formulario,aberto,setFormulario);
 
   if (!aberto) {
     return null;
@@ -184,59 +179,12 @@ export function ConsignacaoModal({
     valor: string,
   ) {
     if (campo === "chassi") {
-      versaoPesquisaChassi.current += 1;
-      setPesquisandoChassi(false);
-      setChassiConferido("");
-      setAvisoChassi("");
       setErro("");
     }
     setFormulario((atual) => ({ ...atual, [campo]: valor }));
   }
 
-  async function pesquisarChassi() {
-    const chassi = formulario.chassi.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-    if (chassi.length !== 17) {
-      setErro("Informe os 17 caracteres do chassi para pesquisar.");
-      return;
-    }
 
-    setPesquisandoChassi(true);
-    const versao = ++versaoPesquisaChassi.current;
-    setErro("");
-    setAvisoChassi("");
-    try {
-      const encontrado = await buscarVeiculoPorChassi(chassi);
-      if (versao !== versaoPesquisaChassi.current) return;
-
-      if (!encontrado) {
-        setAvisoChassi("Chassi não cadastrado. Os dados preenchidos foram mantidos.");
-      } else if (encontrado.data_encerramento === null) {
-        setErro(`Este chassi já possui ciclo ativo (${encontrado.nosso_numero}) no pátio.`);
-        return;
-      } else {
-        setFormulario((atual) => ({
-          ...atual,
-          marca: encontrado.marca,
-          modelo: encontrado.modelo,
-          versao: encontrado.versao ?? "",
-          ano_fabricacao: String(encontrado.ano_fabricacao),
-          ano_modelo: String(encontrado.ano_modelo),
-          combustivel: encontrado.combustivel,
-          placa: encontrado.placa,
-          renavam: encontrado.renavam ?? "",
-          cor: encontrado.cor,
-          observacoes_veiculo: encontrado.observacoes ?? "",
-        }));
-        setAvisoChassi(`Veículo encontrado no ciclo ${encontrado.nosso_numero}. Confira os dados recuperados.`);
-      }
-      setChassiConferido(chassi);
-    } catch (falha) {
-      if (versao !== versaoPesquisaChassi.current) return;
-      setErro(falha instanceof Error ? falha.message : "Não foi possível pesquisar o chassi.");
-    } finally {
-      if (versao === versaoPesquisaChassi.current) setPesquisandoChassi(false);
-    }
-  }
 
   function atualizarCampoCliente(
     campo: keyof FormularioCliente,
@@ -323,9 +271,9 @@ export function ConsignacaoModal({
     event.preventDefault();
 
     const chassiAtual = formulario.chassi.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-    if (chassiConferido !== chassiAtual) {
+    if (!identidade.pronto) {
       entradaAbas.setEtapa(0);
-      setErro("Pesquise o chassi antes de registrar a consignação.");
+      setErro("Confira o chassi e confirme o retorno, se houver cadastro anterior, antes de continuar.");
       return;
     }
 
@@ -345,6 +293,7 @@ export function ConsignacaoModal({
       .join(" ");
 
     const dados: CadastroConsignacao = {
+      confirmacao_retorno:identidade.confirmacao,
       id_proprietario: Number(
         formulario.id_proprietario,
       ),
@@ -529,7 +478,7 @@ export function ConsignacaoModal({
                   }
                   required
                 >
-                  <option value="Flex">Flex</option>
+                  <option value="">Selecione...</option><option value="Flex">Flex</option>
                   <option value="Gasolina">
                     Gasolina
                   </option>
@@ -613,16 +562,10 @@ export function ConsignacaoModal({
                   }
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => void pesquisarChassi()}
-                  disabled={pesquisandoChassi || salvando}
-                >
-                  {pesquisandoChassi ? "Pesquisando..." : "Pesquisar chassi"}
-                </button>
-                {avisoChassi && <small role="status">{avisoChassi}</small>}
+
               </div>
 
+              {identidade.aviso}
               <label className="form-field">
                 <span>RENAVAM</span>
 
@@ -1104,8 +1047,8 @@ export function ConsignacaoModal({
           </section>
         </form>
 
-        <footer className="modal-footer">
-          <button
+        <footer data-ui-actions="navigation" className="modal-footer">
+          <button data-ui-nav="back"
             type="button"
             className="button button-secondary"
             onClick={onFechar}
@@ -1114,8 +1057,8 @@ export function ConsignacaoModal({
             Cancelar
           </button>
 
-          {entradaAbas.etapa===1&&<button type="button" className="button button-secondary" disabled={salvando} onClick={()=>entradaAbas.setEtapa(0)}>Anterior</button>}
-          {entradaAbas.etapa===0?<button type="button" form="formulario-consignacao" className="button button-primary" disabled={salvando} onClick={e=>entradaAbas.proxima(e.currentTarget)}>Próxima</button>:<button
+          {entradaAbas.etapa===1&&<button data-ui-nav="back" type="button" className="button button-secondary" disabled={salvando} onClick={()=>entradaAbas.setEtapa(0)}>Anterior</button>}
+          {entradaAbas.etapa===0?<button data-ui-nav="next" type="button" form="formulario-consignacao" className="button button-primary" disabled={salvando||!identidade.pronto} onClick={e=>entradaAbas.proxima(e.currentTarget)}>Próxima</button>:<button
             type="submit"
             form="formulario-consignacao"
             className="button button-primary"

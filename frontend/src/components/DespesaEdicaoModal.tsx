@@ -587,7 +587,7 @@ export function DespesaEdicaoModal({
                   : "Salvar alterações"}
               </button>
 
-              <button
+              <button data-ui-nav="back"
                 className="button secondary"
                 type="button"
                 onClick={aoFechar}

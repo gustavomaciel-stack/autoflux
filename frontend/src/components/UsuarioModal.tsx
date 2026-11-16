@@ -381,7 +381,7 @@ export function UsuarioModal({
           </div>
 
           <div className="modal-actions">
-            <button
+            <button data-ui-nav="back"
               className="button secondary"
               type="button"
               onClick={aoFechar}

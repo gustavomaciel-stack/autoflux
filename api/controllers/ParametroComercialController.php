@@ -13,7 +13,7 @@ final class ParametroComercialController
 
     public function salvar(array $dados, int $idUsuario): array
     {
-        $padrao = Percentual::validar($dados['percentual_padrao'] ?? null, 'Markup padrão');
+        $padrao = Percentual::validar($dados['percentual_padrao'] ?? null, 'Margem-alvo da revenda');
         $minimo = Percentual::validar($dados['percentual_minimo'] ?? null, 'Margem mínima');
         if (!array_key_exists('id_parametro_anterior', $dados)) throw new InvalidArgumentException('Atualize a tela antes de salvar os parâmetros.');
         $impostos = $dados['impostos'] ?? null;

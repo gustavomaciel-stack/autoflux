@@ -39,6 +39,8 @@ interface FornecedorModalProps {
   fornecedor: Fornecedor | null;
   aoFechar: () => void;
   aoSalvar: () => Promise<void>;
+  origemCadastro?: "despesa";
+  aoCadastrar?: (id:number,dados:FornecedorFormData) => void;
 }
 
 function dadosDoFornecedor(
@@ -69,6 +71,8 @@ export function FornecedorModal({
   fornecedor,
   aoFechar,
   aoSalvar,
+  aoCadastrar,
+  origemCadastro,
 }: FornecedorModalProps) {
   const [formulario, setFormulario] =
     useState<FornecedorFormData>(formularioInicial);
@@ -128,7 +132,8 @@ export function FornecedorModal({
           formulario,
         );
       } else {
-        await cadastrarFornecedor(formulario);
+        const resposta=await cadastrarFornecedor(formulario, origemCadastro);
+        if(resposta.id_fornecedor)aoCadastrar?.(Number(resposta.id_fornecedor),formulario);
       }
 
       await aoSalvar();
@@ -484,7 +489,7 @@ export function FornecedorModal({
           </div>
 
           <footer className="modal-actions">
-            <button
+            <button data-ui-nav="back"
               className="button secondary"
               type="button"
               onClick={aoFechar}

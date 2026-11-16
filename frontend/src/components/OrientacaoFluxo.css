@@ -1,0 +1,44 @@
+.orientacao-fluxo {
+  display: inline-flex;
+  position: relative;
+  align-items: flex-start;
+  vertical-align: middle;
+  margin: 2px 4px;
+  text-align: left;
+}
+.orientacao-fluxo > button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #ebbf55;
+  border-radius: 50%;
+  background: #fff2bf;
+  color: #805401;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: help;
+}
+.orientacao-fluxo > button:focus-visible {
+  outline: 3px solid #83adff;
+  outline-offset: 2px;
+}
+.orientacao-fluxo-texto {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: var(--orientacao-deslocamento, 0px);
+  width: min(280px, 55vw);
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #ebbf55;
+  border-radius: 8px;
+  background: #fff9e7;
+  color: #634910;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  box-shadow: 0 6px 15px #172b4d20;
+}

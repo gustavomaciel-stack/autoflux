@@ -153,15 +153,7 @@ final class ClienteController
     private function documentoValido(string $documento, string $tipo): bool
     {
         if ($tipo === 'PJ') return Cnpj::valido($documento);
-        if (!preg_match('/^[0-9]{11}$/D', $documento) || preg_match('/^([0-9])\1{10}$/D', $documento)) return false;
-        for ($n = 9; $n < 11; $n++) {
-            $soma = 0;
-            for ($i = 0; $i < $n; $i++) $soma += (int) $documento[$i] * ($n + 1 - $i);
-            $digito = ($soma * 10) % 11;
-            if ($digito === 10) $digito = 0;
-            if ($digito !== (int) $documento[$n]) return false;
-        }
-        return true;
+        return preg_match('/^[0-9]{11}$/D', $documento) === 1;
     }
 
     private function validarEPrepararDados(
@@ -283,7 +275,7 @@ final class ClienteController
         if ($tipoPessoa === 'PF') {
             if ($cpf === null || !$this->documentoValido($cpf, 'PF')) {
                 throw new InvalidArgumentException(
-                    'Para pessoa física, informe um CPF válido.'
+                    'Para pessoa física, informe um CPF com 11 números.'
                 );
             }
 
@@ -294,7 +286,7 @@ final class ClienteController
         if ($tipoPessoa === 'PJ') {
             if ($cnpj === null || !$this->documentoValido($cnpj, 'PJ')) {
                 throw new InvalidArgumentException(
-                    'CNPJ inválido. Informe 12 letras/números e 2 dígitos verificadores corretos (ex.: 12.ABC.345/01DE-35).'
+                    'Informe um CNPJ com 14 caracteres: 12 letras/números e 2 números finais.'
                 );
             }
 

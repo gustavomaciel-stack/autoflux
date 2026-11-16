@@ -59,6 +59,7 @@ export interface Consignacao {
 }
 
 export interface CadastroConsignacao {
+  confirmacao_retorno?: import("../components/IdentidadeEntrada").ConfirmacaoRetorno | null;
   id_proprietario: number;
   id_usuario_responsavel: number;
 

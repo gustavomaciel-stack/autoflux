@@ -5,12 +5,17 @@ final class ReservaOrcamento {
  public function __construct(private PDO $pdo) {}
  private function executar(string $sql,array $args=[]): PDOStatement {$q=$this->pdo->prepare($sql);$q->execute($args);return $q;}
  public function ativa(int $ciclo): array|false {return $this->executar('SELECT * FROM reservas_orcamento WHERE ciclo_ativo=?',[$ciclo])->fetch(PDO::FETCH_ASSOC);}
+ // Consulta somente a identificação da reserva impeditiva, sem expor cliente ou sinal.
+ public function reservaEmOutroOrcamento(int $orcamento): ?array {
+  $q=$this->executar('SELECT outro.numero_orcamento FROM orcamentos o JOIN reservas_orcamento r ON r.ciclo_ativo=o.id_ciclo JOIN orcamentos outro ON outro.id_orcamento=r.id_orcamento WHERE o.id_orcamento=? AND r.id_orcamento<>o.id_orcamento LIMIT 1',[$orcamento]);
+  $r=$q->fetch(PDO::FETCH_ASSOC);return $r===false?null:$r;
+ }
  public function conferirCiclo(int $ciclo,?int $orcamento=null): void {
   $r=$this->ativa($ciclo);
   if($r&&($orcamento===null||(int)$r['id_orcamento']!==$orcamento))throw new DomainException('O veículo está reservado em outra negociação.');
  }
  public function detalhes(int $orcamento): array {
-  $reservas=$this->executar('SELECT r.*,u.nome responsavel,us.nome responsavel_sinal,ul.nome responsavel_liberacao FROM reservas_orcamento r JOIN usuarios u ON u.id_usuario=r.id_usuario_responsavel LEFT JOIN usuarios us ON us.id_usuario=r.id_usuario_sinal LEFT JOIN usuarios ul ON ul.id_usuario=r.id_usuario_liberacao WHERE r.id_orcamento=? ORDER BY r.id_reserva DESC',[$orcamento])->fetchAll(PDO::FETCH_ASSOC);
+  $reservas=$this->executar('SELECT r.*,DATE_ADD(r.data_reserva, INTERVAL 7 DAY) data_expiracao,u.nome responsavel,us.nome responsavel_sinal,ul.nome responsavel_liberacao FROM reservas_orcamento r JOIN usuarios u ON u.id_usuario=r.id_usuario_responsavel LEFT JOIN usuarios us ON us.id_usuario=r.id_usuario_sinal LEFT JOIN usuarios ul ON ul.id_usuario=r.id_usuario_liberacao WHERE r.id_orcamento=? ORDER BY r.id_reserva DESC',[$orcamento])->fetchAll(PDO::FETCH_ASSOC);
   $eventos=$this->executar('SELECT e.*,u.nome responsavel FROM eventos_reserva_orcamento e JOIN reservas_orcamento r ON r.id_reserva=e.id_reserva JOIN usuarios u ON u.id_usuario=e.id_usuario_responsavel WHERE r.id_orcamento=? ORDER BY e.id_evento DESC',[$orcamento])->fetchAll(PDO::FETCH_ASSOC);
   // Versão usa o último evento real, mesmo quando agrupamos a exibição antiga.
   $versao=(int)($eventos[0]['id_evento']??0);

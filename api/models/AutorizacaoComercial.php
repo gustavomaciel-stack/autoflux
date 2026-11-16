@@ -7,7 +7,7 @@ final class AutorizacaoComercial {
   $q=$pdo->prepare('SELECT * FROM orcamentos WHERE id_orcamento=?');$q->execute([$orcamento]);$o=$q->fetch(PDO::FETCH_ASSOC);
   if(!$o||!in_array($o['situacao'],['Em negociação','Aguardando aprovação'],true))throw new DomainException('Este orçamento não permite solicitar autorização.');
   if((float)$o['margem_prevista']>=(float)$o['percentual_minimo_aplicado'])throw new DomainException('A proposta respeita o limite e pode ser autorizada sem aprovação excepcional.');
-  $q=$pdo->prepare('SELECT id_negociacao FROM negociacoes_orcamento WHERE id_orcamento=? ORDER BY id_negociacao DESC LIMIT 1');$q->execute([$orcamento]);$versao=$q->fetchColumn();
+  $q=$pdo->prepare('SELECT id_negociacao FROM negociacoes_orcamento WHERE id_orcamento=? AND tipo_registro<>\'Versionamento\' ORDER BY id_negociacao DESC LIMIT 1');$q->execute([$orcamento]);$versao=$q->fetchColumn();
   if($versao===false)throw new DomainException('A proposta não possui histórico.');
   $q=$pdo->prepare('SELECT decisao FROM aprovacoes_orcamento WHERE id_negociacao=?');$q->execute([$versao]);$decisao=$q->fetchColumn();
   if($decisao!==false&&$decisao!=='Pendente')throw new DomainException('Esta versão já foi decidida. Edite a proposta para solicitar nova análise.');
@@ -20,20 +20,67 @@ final class AutorizacaoComercial {
  // Executada dentro da transação de criação/ajuste, depois de solicitar a versão atual.
  // O indicador de Gestão é determinado pela sessão autenticada na rota.
  public static function aprovarPeloGestor(PDO $pdo,int $orcamento,int $usuario,string $motivo=''): void {
-  $q=$pdo->prepare("UPDATE aprovacoes_orcamento SET decisao='Aprovada',id_usuario_aprovador=?,data_decisao=CURRENT_TIMESTAMP,observacoes=? WHERE id_orcamento=? AND decisao='Pendente' AND id_negociacao=(SELECT MAX(n.id_negociacao) FROM negociacoes_orcamento n WHERE n.id_orcamento=?)");
+  $q=$pdo->prepare("UPDATE aprovacoes_orcamento SET decisao='Aprovada',id_usuario_aprovador=?,data_decisao=CURRENT_TIMESTAMP,observacoes=? WHERE id_orcamento=? AND decisao='Pendente' AND id_negociacao=(SELECT MAX(n.id_negociacao) FROM negociacoes_orcamento n WHERE n.id_orcamento=? AND n.tipo_registro<>'Versionamento')");
   $q->execute([$usuario,'Autorização direta pelo usuário Gestão/Diretoria que registrou a proposta.'.($motivo!==''?' Motivo do ajuste: '.$motivo:''),$orcamento,$orcamento]);
   if($q->rowCount()!==1)throw new DomainException('A solicitação da proposta atual não foi encontrada para autorização.');
   $q=$pdo->prepare("UPDATE orcamentos SET situacao='Autorizado' WHERE id_orcamento=?");$q->execute([$orcamento]);
  }
- public function listar(): array {
-  return $this->pdo->query("SELECT a.*,o.numero_orcamento,o.situacao situacao_orcamento,c.nosso_numero,v.marca,v.modelo,v.placa,cl.nome_razao_social cliente,u.nome vendedor,sol.nome solicitante,apr.nome aprovador,
-   CASE WHEN a.decisao<>'Pendente' THEN a.decisao WHEN o.situacao='Aguardando aprovação' AND a.id_negociacao=(SELECT MAX(n.id_negociacao) FROM negociacoes_orcamento n WHERE n.id_orcamento=o.id_orcamento) THEN 'Pendente' ELSE 'Encerrada sem decisão' END situacao_analise
-   FROM aprovacoes_orcamento a JOIN orcamentos o ON o.id_orcamento=a.id_orcamento JOIN ciclos_veiculo c ON c.id_ciclo=o.id_ciclo JOIN veiculos v ON v.id_veiculo=c.id_veiculo JOIN clientes cl ON cl.id_cliente=o.id_cliente JOIN vendedores vd ON vd.id_vendedor=o.id_vendedor JOIN usuarios u ON u.id_usuario=vd.id_usuario JOIN usuarios sol ON sol.id_usuario=a.id_usuario_solicitante LEFT JOIN usuarios apr ON apr.id_usuario=a.id_usuario_aprovador
-   ORDER BY a.data_solicitacao,a.id_aprovacao")->fetchAll(PDO::FETCH_ASSOC);
+ private function consulta(): string {
+  return "SELECT a.*,o.numero_orcamento,o.situacao situacao_orcamento,c.nosso_numero,v.marca,v.modelo,v.placa,cl.nome_razao_social cliente,u.nome vendedor,sol.nome solicitante,apr.nome aprovador,
+   CASE WHEN a.decisao<>'Pendente' THEN a.decisao WHEN o.situacao='Aguardando aprovação' AND a.id_negociacao=(SELECT MAX(n.id_negociacao) FROM negociacoes_orcamento n WHERE n.id_orcamento=o.id_orcamento AND n.tipo_registro<>'Versionamento') THEN 'Pendente' ELSE 'Encerrada sem decisão' END situacao_analise
+   FROM aprovacoes_orcamento a JOIN orcamentos o ON o.id_orcamento=a.id_orcamento JOIN ciclos_veiculo c ON c.id_ciclo=o.id_ciclo JOIN veiculos v ON v.id_veiculo=c.id_veiculo JOIN clientes cl ON cl.id_cliente=o.id_cliente JOIN vendedores vd ON vd.id_vendedor=o.id_vendedor JOIN usuarios u ON u.id_usuario=vd.id_usuario JOIN usuarios sol ON sol.id_usuario=a.id_usuario_solicitante LEFT JOIN usuarios apr ON apr.id_usuario=a.id_usuario_aprovador";
+ }
+ private function consultar(string $sql, array $parametros = []): array {
+  $q = $this->pdo->prepare($sql);
+  $q->execute($parametros);
+  return $q->fetchAll(PDO::FETCH_ASSOC);
+ }
+ public function listar(bool $somentePendentes = false): array {
+  $filtro = $somentePendentes ? " WHERE situacao_analise = 'Pendente'" : '';
+  return $this->consultar("SELECT * FROM (".$this->consulta().") autorizacoes".$filtro.
+   " ORDER BY COALESCE(data_decisao, data_solicitacao) DESC, id_aprovacao DESC");
+ }
+ public function paginar(array $filtros): array {
+  $condicoes = [];
+  $valores = [];
+  foreach (['situacao' => 'situacao_analise', 'vendedor' => 'vendedor'] as $filtro => $campo) {
+   $valor = Orcamento::texto($filtros[$filtro] ?? '', 255);
+   if ($valor === '') continue;
+   $condicoes[] = "$campo = ?";
+   $valores[] = $valor;
+  }
+  foreach (['inicio' => '>=', 'fim' => '<='] as $filtro => $operador) {
+   $valor = Orcamento::texto($filtros[$filtro] ?? '', 10);
+   if ($valor === '') continue;
+   $data = DateTimeImmutable::createFromFormat('!Y-m-d', $valor);
+   if (!$data || $data->format('Y-m-d') !== $valor) throw new InvalidArgumentException('Período inválido.');
+   $condicoes[] = "data_solicitacao $operador ?";
+   $valores[] = $valor . ($filtro === 'inicio' ? ' 00:00:00' : ' 23:59:59');
+  }
+  $busca = Orcamento::texto($filtros['busca'] ?? '', 150);
+  if ($busca !== '') {
+   $condicoes[] = "LOCATE(?, CONVERT(CONCAT_WS(' ', numero_orcamento, nosso_numero, marca, modelo, placa, cliente, vendedor, solicitante) USING utf8mb4) COLLATE utf8mb4_unicode_ci) > 0";
+   $valores[] = $busca;
+  }
+  $origem = " FROM (".$this->consulta().") autorizacoes";
+  $where = $condicoes ? ' WHERE '.implode(' AND ', $condicoes) : '';
+  $total = (int)$this->consultar('SELECT COUNT(*) AS total'.$origem.$where, $valores)[0]['total'];
+  $paginas = max(1, (int)ceil($total / 20));
+  $pagina = min(Orcamento::id($filtros['pagina']), $paginas);
+  $offset = ($pagina - 1) * 20;
+  $itens = $this->consultar('SELECT *'.$origem.$where.
+   " ORDER BY (situacao_analise = 'Aprovada') DESC, COALESCE(data_decisao, data_solicitacao) DESC, id_aprovacao DESC LIMIT 20 OFFSET $offset", $valores);
+  $pendencias = (int)$this->consultar("SELECT COUNT(*) AS total".$origem." WHERE situacao_analise = 'Pendente'")[0]['total'];
+  $vendedores = $this->consultar('SELECT DISTINCT vendedor'.$origem.' ORDER BY vendedor');
+  return ['itens'=>$itens, 'total'=>$total, 'pagina'=>$pagina, 'paginas'=>$paginas,
+   'pendencias'=>$pendencias, 'vendedores'=>array_column($vendedores, 'vendedor')];
  }
  public function detalhes(int $id): array {
-  foreach($this->listar() as $a)if((int)$a['id_aprovacao']===$id){$a['orcamento']=(new Orcamento($this->pdo))->detalhes((int)$a['id_orcamento']);return $a;}
-  throw new InvalidArgumentException('Autorização não encontrada.');
+  $a = $this->consultar($this->consulta().' WHERE a.id_aprovacao = ?', [$id])[0] ?? null;
+  if (!$a) throw new InvalidArgumentException('Autorização não encontrada.');
+  $a['orcamento'] = (new Orcamento($this->pdo))->detalhes((int)$a['id_orcamento']);
+  $a['reserva_outro_orcamento'] = $a['orcamento']['reserva_outro_orcamento'] ?? null;
+  return $a;
  }
  public function decidir(int $id,array $dados,int $usuario): void {
   $decisao=$dados['decisao']??null;
@@ -46,17 +93,21 @@ final class AutorizacaoComercial {
    // Mesma ordem de bloqueio da edição: orçamento primeiro, depois autorização.
    $q=$this->pdo->prepare('SELECT * FROM orcamentos WHERE id_orcamento=? FOR UPDATE');$q->execute([$orcamento]);$o=$q->fetch(PDO::FETCH_ASSOC);
    $q=$this->pdo->prepare('SELECT * FROM aprovacoes_orcamento WHERE id_aprovacao=? FOR UPDATE');$q->execute([$id]);$a=$q->fetch(PDO::FETCH_ASSOC);
-   $q=$this->pdo->prepare('SELECT MAX(id_negociacao) FROM negociacoes_orcamento WHERE id_orcamento=?');$q->execute([$orcamento]);$ultima=(int)$q->fetchColumn();
+   $q=$this->pdo->prepare('SELECT MAX(id_negociacao) FROM negociacoes_orcamento WHERE id_orcamento=? AND tipo_registro<>\'Versionamento\'');$q->execute([$orcamento]);$ultima=(int)$q->fetchColumn();
    if($a['decisao']!=='Pendente'||$o['situacao']!=='Aguardando aprovação'||$ultima!==$esperada||$esperada!==(int)$a['id_negociacao']||$o['valor_negociado_atual']!==$a['valor_negociado_analisado'])throw new DomainException('A proposta foi alterada, cancelada ou já decidida. Atualize a consulta antes de analisar.');
    foreach(['base_comercial_planejada'=>'base_comercial_analisada','preco_sugerido'=>'preco_sugerido_analisado','resultado_previsto'=>'resultado_previsto_analisado','margem_prevista'=>'margem_prevista_analisada','percentual_minimo_aplicado'=>'percentual_minimo_analisado'] as $campo=>$snapshot){
     if($o[$campo]!==$a[$snapshot])throw new DomainException('Os valores analisados mudaram. Atualize a consulta.');
    }
-   $q=$this->pdo->prepare('SELECT situacao_atual,data_encerramento FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE');$q->execute([$o['id_ciclo']]);$c=$q->fetch(PDO::FETCH_ASSOC);
-   if($decisao==='Aprovada')(new Orcamento($this->pdo))->conferirCusto($o);
-   $reserva=new ReservaOrcamento($this->pdo);
-   if($decisao==='Aprovada')$reserva->conferirCiclo((int)$o['id_ciclo'],(int)$orcamento);
-   $propria=$reserva->ativa((int)$o['id_ciclo']);
-   if($decisao==='Aprovada'&&(!$c||$c['data_encerramento']!==null||!in_array($c['situacao_atual'],['Disponível','Reservado'],true)||($c['situacao_atual']==='Reservado'&&!$propria)))throw new DomainException('O veículo não está disponível para autorizar esta negociação.');
+   // Rejeitar encerra apenas a análise: não depende da disponibilidade do estoque.
+   // Somente aprovar disputa o veículo e exige custos e reserva compatíveis.
+   if($decisao==='Aprovada'){
+    $q=$this->pdo->prepare('SELECT situacao_atual,data_encerramento FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE');$q->execute([$o['id_ciclo']]);$c=$q->fetch(PDO::FETCH_ASSOC);
+    $reserva=new ReservaOrcamento($this->pdo);
+    $reserva->conferirCiclo((int)$o['id_ciclo'],(int)$orcamento);
+    $propria=$reserva->ativa((int)$o['id_ciclo']);
+    if(!$c||$c['data_encerramento']!==null||!in_array($c['situacao_atual'],['Disponível','Reservado'],true)||($c['situacao_atual']==='Reservado'&&!$propria))throw new DomainException('O veículo não está disponível para autorizar esta negociação.');
+    (new Orcamento($this->pdo))->conferirCusto($o);
+   }
    $q=$this->pdo->prepare('UPDATE aprovacoes_orcamento SET decisao=?,id_usuario_aprovador=?,data_decisao=CURRENT_TIMESTAMP,observacoes=? WHERE id_aprovacao=?');$q->execute([$decisao,$usuario,$obs,$id]);
    $q=$this->pdo->prepare('UPDATE orcamentos SET situacao=? WHERE id_orcamento=?');$q->execute([$decisao==='Aprovada'?'Autorizado':'Em negociação',$orcamento]);
    $this->pdo->commit();

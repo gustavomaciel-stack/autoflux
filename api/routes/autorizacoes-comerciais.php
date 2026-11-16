@@ -6,7 +6,7 @@ try {
  Auth::proteger();Auth::exigir('autorizacoes.decidir');$usuario=Auth::usuario();
  date_default_timezone_set('America/Sao_Paulo');$pdo=Database::conectar();$pdo->exec("SET time_zone='-03:00'");$m=new AutorizacaoComercial($pdo);
  $metodo=$_SERVER['REQUEST_METHOD']??'GET';
- if($metodo==='GET')Auth::responder(200,['sucesso'=>true,'dados'=>isset($_GET['id'])?$m->detalhes(Orcamento::id($_GET['id'])):$m->listar()]);
+ if($metodo==='GET')Auth::responder(200,['sucesso'=>true,'dados'=>isset($_GET['id'])?$m->detalhes(Orcamento::id($_GET['id'])):(isset($_GET['pagina'])?$m->paginar($_GET):$m->listar(($_GET['pendentes']??'')==='1'))]);
  if($metodo!=='POST'){header('Allow: GET, POST, OPTIONS');Auth::responder(405,['sucesso'=>false,'mensagem'=>'Método não permitido.']);}
  $dados=json_decode(file_get_contents('php://input')?:'',true,512,JSON_THROW_ON_ERROR);if(!is_array($dados))throw new InvalidArgumentException('Dados inválidos.');
  $id=Orcamento::id($_GET['id']??null);$m->decidir($id,$dados,(int)$usuario['id_usuario']);Auth::responder(200,['sucesso'=>true,'dados'=>$m->detalhes($id)]);

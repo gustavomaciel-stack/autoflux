@@ -594,3 +594,26 @@
     width: 100%;
   }
 }
+
+/* Arquivo da nota fiscal na devolução. */
+#formulario-devolucao .form-grid > h3 { grid-column: 1 / -1; margin: 14px 0 0; }
+#formulario-devolucao input[type="file"] {
+  padding: 8px;
+  min-height: 54px;
+  width: 100%;
+  background: #fff;
+  color: #526783;
+  font: inherit;
+}
+#formulario-devolucao input[type="file"]::file-selector-button {
+  margin-right: 14px;
+  padding: 12px 18px;
+  border: 1px solid #c6d7ff;
+  border-radius: 8px;
+  background: #edf3ff;
+  color: #1462f3;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+#formulario-devolucao input[type="file"]::file-selector-button:hover { background: #dfeaff; }

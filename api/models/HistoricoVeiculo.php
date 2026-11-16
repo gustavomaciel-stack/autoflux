@@ -12,7 +12,8 @@ final class HistoricoVeiculo
     }
 
     public function buscarPorVeiculo(
-        int $idVeiculo
+        int $idVeiculo,
+        bool $incluirVendas = true
     ): ?array {
         $veiculo = $this->buscarVeiculo($idVeiculo);
 
@@ -20,11 +21,31 @@ final class HistoricoVeiculo
             return null;
         }
 
+        $ciclos = $this->buscarCiclos($idVeiculo);
+        if ($incluirVendas) {
+            $comando = $this->conexao->prepare(
+                "SELECT f.id_venda, f.id_ciclo, f.valor_final, f.data_venda,
+                        p.id_pedido, p.numero_pedido, p.situacao AS situacao_pedido
+                 FROM vendas_fechamento_autoflux f
+                 INNER JOIN pedidos_venda_autoflux p ON p.id_pedido = f.id_pedido
+                 INNER JOIN ciclos_veiculo c ON c.id_ciclo = f.id_ciclo
+                 WHERE c.id_veiculo = ?
+                 ORDER BY f.data_venda DESC, f.id_venda DESC"
+            );
+            $comando->execute([$idVeiculo]);
+            $porCiclo = [];
+            foreach ($comando->fetchAll(PDO::FETCH_ASSOC) as $venda) {
+                $porCiclo[$venda['id_ciclo']][] = $venda;
+            }
+            foreach ($ciclos as &$ciclo) {
+                $ciclo['vendas'] = $porCiclo[$ciclo['id_ciclo']] ?? [];
+            }
+            unset($ciclo);
+        }
+
         return [
             "veiculo" => $veiculo,
-            "ciclos" => $this->buscarCiclos(
-                $idVeiculo
-            ),
+            "ciclos" => $ciclos,
         ];
     }
 
@@ -69,10 +90,21 @@ final class HistoricoVeiculo
         int $idVeiculo
     ): array {
         $sql = "
+            WITH RECURSIVE ciclos_da_operacao AS (
+                SELECT id_ciclo AS destino, id_ciclo AS origem
+                FROM ciclos_veiculo
+                WHERE id_veiculo = :id_veiculo_custos
+                UNION DISTINCT
+                SELECT anterior.destino, retorno.id_ciclo_origem
+                FROM cancelamentos_venda_autoflux retorno
+                JOIN ciclos_da_operacao anterior ON anterior.origem = retorno.id_ciclo_retorno
+                WHERE retorno.id_ciclo_origem < retorno.id_ciclo_retorno
+            )
             SELECT
                 ciclo.id_ciclo,
                 ciclo.nosso_numero,
                 ciclo.origem_entrada,
+                ciclo.origem_movimento,
                 ciclo.renavam,
                 ciclo.cor,
                 ciclo.quilometragem_entrada,
@@ -110,9 +142,27 @@ final class HistoricoVeiculo
                         SELECT SUM(despesa.valor)
                         FROM despesas_veiculo
                             AS despesa
-                        WHERE despesa.id_ciclo =
-                            ciclo.id_ciclo
-                          AND despesa.ativo = 1
+                        WHERE despesa.ativo = 1
+                              AND (
+                                  despesa.id_ciclo = ciclo.id_ciclo
+                                  OR (
+                                      despesa.id_ciclo IN (
+                                          SELECT origem FROM ciclos_da_operacao
+                                          WHERE destino = ciclo.id_ciclo AND origem <> destino
+                                      )
+                                      AND (
+                                          despesa.responsavel_despesa = 'Revenda'
+                                          OR (
+                                              despesa.responsavel_despesa IS NULL
+                                              AND EXISTS (
+                                                  SELECT 1 FROM ciclos_veiculo origem_despesa
+                                                  WHERE origem_despesa.id_ciclo = despesa.id_ciclo
+                                                    AND origem_despesa.origem_entrada <> 'Consignação'
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
                     ),
                     0
                 ) AS despesas_realizadas,
@@ -144,9 +194,27 @@ final class HistoricoVeiculo
                             SELECT SUM(despesa.valor)
                             FROM despesas_veiculo
                                 AS despesa
-                            WHERE despesa.id_ciclo =
-                                ciclo.id_ciclo
-                              AND despesa.ativo = 1
+                            WHERE despesa.ativo = 1
+                              AND (
+                                  despesa.id_ciclo = ciclo.id_ciclo
+                                  OR (
+                                      despesa.id_ciclo IN (
+                                          SELECT origem FROM ciclos_da_operacao
+                                          WHERE destino = ciclo.id_ciclo AND origem <> destino
+                                      )
+                                      AND (
+                                          despesa.responsavel_despesa = 'Revenda'
+                                          OR (
+                                              despesa.responsavel_despesa IS NULL
+                                              AND EXISTS (
+                                                  SELECT 1 FROM ciclos_veiculo origem_despesa
+                                                  WHERE origem_despesa.id_ciclo = despesa.id_ciclo
+                                                    AND origem_despesa.origem_entrada <> 'Consignação'
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
                         ),
                         0
                     )
@@ -163,9 +231,27 @@ final class HistoricoVeiculo
                             SELECT SUM(despesa.valor)
                             FROM despesas_veiculo
                                 AS despesa
-                            WHERE despesa.id_ciclo =
-                                ciclo.id_ciclo
-                              AND despesa.ativo = 1
+                            WHERE despesa.ativo = 1
+                              AND (
+                                  despesa.id_ciclo = ciclo.id_ciclo
+                                  OR (
+                                      despesa.id_ciclo IN (
+                                          SELECT origem FROM ciclos_da_operacao
+                                          WHERE destino = ciclo.id_ciclo AND origem <> destino
+                                      )
+                                      AND (
+                                          despesa.responsavel_despesa = 'Revenda'
+                                          OR (
+                                              despesa.responsavel_despesa IS NULL
+                                              AND EXISTS (
+                                                  SELECT 1 FROM ciclos_veiculo origem_despesa
+                                                  WHERE origem_despesa.id_ciclo = despesa.id_ciclo
+                                                    AND origem_despesa.origem_entrada <> 'Consignação'
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
                         ),
                         0
                     )
@@ -212,6 +298,7 @@ final class HistoricoVeiculo
 
         $comando->execute([
             "id_veiculo" => $idVeiculo,
+            "id_veiculo_custos" => $idVeiculo,
         ]);
 
         return $comando->fetchAll(

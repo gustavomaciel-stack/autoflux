@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/../config/Percentual.php";
+require_once __DIR__ . "/ComissaoVenda.php";
 
 final class Usuario
 {
@@ -363,20 +364,16 @@ final class Usuario
 
     private function sincronizarComissao(int $idUsuario, mixed $percentual): void
     {
-        $q = $this->conexao->prepare("SELECT COUNT(*) FROM usuarios_perfis up
-            INNER JOIN perfis p ON p.id_perfil = up.id_perfil AND p.ativo = 1
-            WHERE up.id_usuario = ? AND up.ativo = 1 AND LOWER(TRIM(p.nome)) IN ('vendedor','gestão','gestao','diretoria','gestão/diretoria','gestao/diretoria')");
+        $q = $this->conexao->prepare("SELECT COUNT(*) FROM usuarios_perfis up JOIN perfis p ON p.id_perfil=up.id_perfil AND p.ativo=1 WHERE up.id_usuario=? AND up.ativo=1 AND LOWER(TRIM(p.nome))='vendedor'");
         $q->execute([$idUsuario]);
-        if ((int) $q->fetchColumn() === 0) {
+        $vendedor = (int)$q->fetchColumn() > 0;
+        if (!$vendedor && !ComissaoVenda::semComissao($this->conexao, $idUsuario)) {
             $q = $this->conexao->prepare('UPDATE vendedores SET ativo = 0 WHERE id_usuario = ?');
             $q->execute([$idUsuario]);
             return;
         }
-        // Gestão também pode vender. Sem comissão informada, preserva a existente
-        // ou começa em zero; o perfil Vendedor mantém a validação obrigatória.
-        $q = $this->conexao->prepare("SELECT COUNT(*) FROM usuarios_perfis up JOIN perfis p ON p.id_perfil=up.id_perfil AND p.ativo=1 WHERE up.id_usuario=? AND up.ativo=1 AND LOWER(TRIM(p.nome))='vendedor'");
-        $q->execute([$idUsuario]);
-        $vendedor = (int)$q->fetchColumn() > 0;
+
+        // Preserva a configuração existente para quem voltar a atuar como vendedor.
         if (!$vendedor && ($percentual === null || $percentual === '')) {
             $q = $this->conexao->prepare('SELECT percentual_comissao FROM vendedores WHERE id_usuario=?');
             $q->execute([$idUsuario]);

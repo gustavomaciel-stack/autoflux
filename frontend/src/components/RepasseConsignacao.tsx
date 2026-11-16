@@ -93,7 +93,7 @@ export function RepasseConsignacao({
             <button type="submit" className="button primary" disabled={salvando}>
               {salvando ? "Salvando..." : "Salvar repasse"}
             </button>
-            <button type="button" className="button secondary" disabled={salvando}
+            <button data-ui-nav="back" type="button" className="button secondary" disabled={salvando}
               onClick={() => { setEditando(false); setErro(""); }}>Cancelar</button>
           </div>
         </form>

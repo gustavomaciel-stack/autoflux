@@ -57,7 +57,7 @@ export function ClienteModal({ cliente, aoFechar, aoSalvar }: { cliente: Cliente
         </fieldset>
         <label className="field"><span>Observações</span><textarea disabled={salvando} value={form.observacoes} onChange={e => campo('observacoes',e.target.value)} rows={3} /></label>
       </div>
-      <footer className="modal-footer"><button type="button" className="button secondary" disabled={salvando} onClick={aoFechar}>Cancelar</button><button className="button primary" type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar cliente'}</button></footer>
+      <footer className="modal-footer"><button data-ui-nav="back" type="button" className="button secondary" disabled={salvando} onClick={aoFechar}>Cancelar</button><button className="button primary" type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar cliente'}</button></footer>
     </form>
   </dialog>;
 }

@@ -184,6 +184,12 @@ try {
         );
     }
 
+    if ($metodo === "POST" && ($_GET['acao'] ?? '') === 'devolver') {
+        Auth::exigir('consignacoes.visualizar');
+        if (!$idConsignacao || $idConsignacao <= 0) throw new InvalidArgumentException('Consignação inválida.');
+        $dados = $_POST;
+        responderConsignacao($controller->registrarDevolucao($idConsignacao, $dados));
+    }
     if ($metodo === "POST") {
         $dados = lerDadosConsignacao();
 

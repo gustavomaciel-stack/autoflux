@@ -6,6 +6,8 @@ require_once __DIR__ . '/Database.php';
 
 final class Auth
 {
+    private const TEMPO_INATIVIDADE = 15 * 60;
+    private static ?array $usuarioAtual = null;
     public static function iniciar(): void
     {
         header('Access-Control-Allow-Origin: http://localhost:5173');
@@ -28,7 +30,23 @@ final class Auth
             ]);
             session_start();
         }
+        if (!empty($_SESSION['id_usuario'])) {
+            $_SESSION['ultima_atividade'] ??= time();
+            if (self::segundosRestantes() === 0) {
+                $_SESSION = [];
+            }
+        }
         $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+    }
+
+    public static function registrarAtividade(): void
+    {
+        $_SESSION['ultima_atividade'] = time();
+    }
+
+    public static function segundosRestantes(): int
+    {
+        return max(0, (int) ($_SESSION['ultima_atividade'] ?? 0) + self::TEMPO_INATIVIDADE - time());
     }
 
     public static function responder(int $status, array $dados): never
@@ -64,6 +82,7 @@ final class Auth
         if ($id <= 0) {
             self::responder(401, ['sucesso' => false, 'mensagem' => 'Faça login para acessar o sistema.']);
         }
+        if (self::$usuarioAtual !== null && self::$usuarioAtual['id_usuario'] === $id) return self::$usuarioAtual;
         $pdo = Database::conectar();
         $q = $pdo->prepare('SELECT id_usuario, nome, login FROM usuarios WHERE id_usuario = :id AND ativo = 1');
         $q->execute(['id' => $id]);
@@ -77,10 +96,11 @@ final class Auth
         $usuario['perfis'] = $q->fetchAll(PDO::FETCH_ASSOC);
         $usuario['id_usuario'] = (int) $usuario['id_usuario'];
         $usuario['gestao'] = self::ehGestao($usuario);
+        $usuario['pode_corrigir_chassi'] = self::podeCorrigirChassi($usuario);
         $q = $pdo->prepare('SELECT DISTINCT pm.codigo FROM permissoes pm INNER JOIN perfis_permissoes pp ON pp.id_permissao=pm.id_permissao AND pp.ativo=1 INNER JOIN perfis p ON p.id_perfil=pp.id_perfil AND p.ativo=1 INNER JOIN usuarios_perfis up ON up.id_perfil=p.id_perfil AND up.ativo=1 WHERE up.id_usuario=:id AND pm.ativo=1');
         $q->execute(['id'=>$id]);
         $usuario['permissoes'] = $q->fetchAll(PDO::FETCH_COLUMN);
-        return $usuario;
+        return self::$usuarioAtual = $usuario;
     }
 
     public static function ehGestao(array $usuario): bool
@@ -92,13 +112,43 @@ final class Auth
         return false;
     }
 
+    public static function podeCorrigirChassi(array $usuario): bool
+    {
+        if (self::ehGestao($usuario)) return true;
+        foreach ($usuario['perfis'] ?? [] as $perfil) {
+            if (in_array(mb_strtolower(trim((string)($perfil['nome'] ?? '')), 'UTF-8'), ['gestor', 'diretor'], true)) return true;
+        }
+        return false;
+    }
+
     public static function permite(string $codigo, ?array $usuario = null): bool
     {
         $usuario ??= self::usuario();
-        // Consulta básica do pátio disponível para todo usuário autenticado e ativo.
-        if ($codigo === 'veiculos.visualizar') return true;
+        if ($codigo === 'consignacoes.visualizar') {
+            foreach ($usuario['perfis'] ?? [] as $perfil) {
+                if (mb_strtolower(trim($perfil['nome']), 'UTF-8') === 'vendedor') return true;
+            }
+        }
+        // Consulta e movimentação do pátio disponíveis para todo usuário autenticado e ativo.
+        if (in_array($codigo, ['veiculos.visualizar', 'veiculos.movimentar'], true)) return true;
         // Administração permanece exclusiva de Gestão, mesmo se manipularem vínculos no banco.
         if (in_array($codigo, ['usuarios.administrar','perfis.administrar','consignacoes.devolver'], true)) return self::ehGestao($usuario);
+        if (in_array($codigo, ['custos.visualizar', 'despesas.visualizar', 'despesas.cadastrar'], true)) {
+            foreach ($usuario['perfis'] as $perfil) {
+                if (mb_strtolower(trim($perfil['nome']), 'UTF-8') === 'comprador') return true;
+            }
+        }
+        if (in_array($codigo, ['pedidos.visualizar', 'garantias.gerenciar', 'repasses.gerenciar'], true)) {
+            foreach ($usuario['perfis'] as $perfil) {
+                if (mb_strtolower(trim($perfil['nome']), 'UTF-8') === 'financeiro') return true;
+            }
+        }
+        if ($codigo === 'notas.saida.visualizar') {
+            foreach ($usuario['perfis'] as $perfil) {
+                if (in_array(mb_strtolower(trim($perfil['nome']), 'UTF-8'), ['financeiro', 'comprador'], true)) return true;
+            }
+            return self::permite('notas.visualizar', $usuario) && self::permite('pedidos.visualizar', $usuario);
+        }
         return self::ehGestao($usuario) || in_array($codigo, $usuario['permissoes'], true);
     }
 
@@ -122,9 +172,13 @@ final class Auth
     public static function proteger(): void
     {
         self::iniciar();
-        self::usuario();
+        $usuario = self::usuario();
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
             self::validarCsrf();
         }
+        // Libera a sessão após autenticação/CSRF: chamadas simultâneas não aguardam toda a operação.
+        if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+        require_once __DIR__ . '/../models/ExpiracaoReserva.php';
+        (new ExpiracaoReserva(Database::conectar()))->processar((int) $usuario['id_usuario']);
     }
 }

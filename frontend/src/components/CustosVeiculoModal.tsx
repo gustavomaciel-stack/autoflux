@@ -1,5 +1,10 @@
+import { createPortal } from "react-dom";
+import { useAuth } from "../context/AuthContext";
+import { FornecedorModal } from "./FornecedorModal";
+import "./FornecedorRapido.css";
 import {
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -103,6 +108,10 @@ export function CustosVeiculoModal({
   veiculo,
   aoFechar,
 }: CustosVeiculoModalProps) {
+  const {pode}=useAuth();
+  const [novoFornecedor,setNovoFornecedor]=useState(false);
+  const botaoFornecedor=useRef<HTMLButtonElement>(null);
+  function fecharNovoFornecedor(){setNovoFornecedor(false);requestAnimationFrame(()=>botaoFornecedor.current?.focus());}
   const [custos, setCustos] =
     useState<CustosVeiculo | null>(null);
 
@@ -1108,11 +1117,11 @@ export function CustosVeiculoModal({
                       </select>
                     </label>
 
-                    <label className="field field-full">
-                      Fornecedor *
+                    <div className="field field-full">
+                      <label htmlFor="despesa-fornecedor">Fornecedor *</label><div className="supplier-quick-row">
 
                       <select
-                        name="id_fornecedor"
+                        id="despesa-fornecedor" name="id_fornecedor"
                         value={formularioRealizada.id_fornecedor}
                         onChange={atualizarCampoRealizada}
                         required
@@ -1128,7 +1137,9 @@ export function CustosVeiculoModal({
                           </option>
                         ))}
                       </select>
-                    </label>
+                      {(pode('fornecedores.cadastrar') || pode('despesas.cadastrar'))&&<button ref={botaoFornecedor} type="button" className="supplier-quick-add" aria-label="Cadastrar novo fornecedor" title="Cadastrar novo fornecedor" aria-haspopup="dialog" disabled={salvando} onClick={()=>setNovoFornecedor(true)}>+</button>}
+                      </div>
+                    </div>
 
                     <label className="field field-full">
                       Categoria *
@@ -1207,7 +1218,7 @@ export function CustosVeiculoModal({
               </div>
 
               <div className="modal-actions">
-                <button
+                <button data-ui-nav="back"
                   className="button secondary"
                   type="button"
                   onClick={voltarAoResumo}
@@ -1234,6 +1245,8 @@ export function CustosVeiculoModal({
           </section>
         </div>
       )}
+
+      {novoFornecedor&&createPortal(<div className="supplier-quick-modal"><FornecedorModal aberto fornecedor={null} origemCadastro="despesa" aoFechar={fecharNovoFornecedor} aoSalvar={async()=>{}} aoCadastrar={(id,dados)=>{setFornecedores(atuais=>[...atuais.filter(f=>Number(f.id_fornecedor)!==id),{...dados,id_fornecedor:id,razao_social_nome:dados.razao_social_nome.trim(),ativo:1,data_cadastro:'',data_atualizacao:''}].sort((a,b)=>a.razao_social_nome.localeCompare(b.razao_social_nome,'pt-BR')));setFormularioRealizada(atual=>({...atual,id_fornecedor:String(id)}));}}/></div>,document.body)}
 
       <DespesaEdicaoModal
         aberto={

@@ -1,7 +1,7 @@
 import { formatarCnpj } from "../services/cnpj";
 import {
   useEffect,
-  useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -128,7 +128,12 @@ export function ConsignacoesPage() {
 
   const [busca, setBusca] = useState("");
   const [filtroSituacao, setFiltroSituacao] =
-    useState("Todas");
+    useState("Ativa");
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  const consultaAtual = useRef(0);
 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -158,6 +163,7 @@ export function ConsignacoesPage() {
     useState(false);
 
   async function carregarDados() {
+    const consulta = ++consultaAtual.current;
     setCarregando(true);
     setErro("");
 
@@ -166,69 +172,35 @@ export function ConsignacoesPage() {
         consignacoesRecebidas,
         clientesRecebidos,
       ] = await Promise.all([
-        listarConsignacoes(),
+        listarConsignacoes(pagina, buscaAplicada, filtroSituacao),
         listarClientes(),
       ]);
 
-      setConsignacoes(consignacoesRecebidas);
+      if (consulta !== consultaAtual.current) return;
+      setConsignacoes(consignacoesRecebidas.itens);
+      setTotal(consignacoesRecebidas.total); setPaginas(consignacoesRecebidas.paginas); setPagina(consignacoesRecebidas.pagina);
       setClientes(clientesRecebidos);
     } catch (error) {
+      if (consulta !== consultaAtual.current) return;
       setErro(
         error instanceof Error
           ? error.message
           : "Não foi possível carregar as consignações.",
       );
     } finally {
-      setCarregando(false);
+      if (consulta === consultaAtual.current) setCarregando(false);
     }
   }
 
   useEffect(() => {
     void carregarDados();
-  }, []);
-
-  const consignacoesFiltradas = useMemo(() => {
-    const termo = normalizarTexto(busca);
-
-    return consignacoes.filter((consignacao) => {
-      const correspondeSituacao =
-        filtroSituacao === "Todas" ||
-        consignacao.situacao === filtroSituacao;
-
-      if (!correspondeSituacao) {
-        return false;
-      }
-
-      if (termo === "") {
-        return true;
-      }
-
-      const dadosPesquisaveis = [
-        consignacao.nosso_numero,
-        consignacao.marca,
-        consignacao.modelo,
-        consignacao.versao,
-        consignacao.placa,
-        consignacao.chassi,
-        consignacao.nome_proprietario,
-        consignacao.cpf_proprietario,
-        consignacao.cnpj_proprietario,
-        consignacao.numero_nota,
-        consignacao.serie,
-        consignacao.situacao,
-        consignacao.valor_repasse_acordado,
-        consignacao.responsavel_despesas,
-      ]
-        .map((valor) => normalizarTexto(valor))
-        .join(" ");
-
-      return dadosPesquisaveis.includes(termo);
-    });
-  }, [
-    busca,
-    consignacoes,
-    filtroSituacao,
-  ]);
+    return () => { consultaAtual.current++; };
+  }, [pagina, buscaAplicada, filtroSituacao]);
+  useEffect(() => {
+    if (busca.trim() === buscaAplicada) return;
+    const timer = window.setTimeout(() => {setBuscaAplicada(busca.trim()); setPagina(1);}, 250);
+    return () => window.clearTimeout(timer);
+  }, [busca, buscaAplicada]);
 
   function clienteCadastrado(cliente: Cliente) {
     setClientes((atuais) => {
@@ -335,22 +307,10 @@ export function ConsignacoesPage() {
       const atualizada =
         await devolverConsignacao(
           consignacaoDevolucao.id_consignacao,
-          {
-            acao: "devolver",
-            id_usuario_responsavel: 1,
-            data_saida: dataSaida,
-            motivo_saida: motivoSaida.trim(),
-          },
+          new FormData(event.currentTarget),
         );
 
-      setConsignacoes((atuais) =>
-        atuais.map((consignacao) =>
-          consignacao.id_consignacao ===
-          atualizada.id_consignacao
-            ? atualizada
-            : consignacao,
-        ),
-      );
+      await carregarDados();
 
       setConsignacaoDevolucao(null);
 
@@ -419,12 +379,11 @@ export function ConsignacoesPage() {
 
             <select
               value={filtroSituacao}
-              onChange={(event) =>
-                setFiltroSituacao(event.target.value)
-              }
+              onChange={(event) => {setFiltroSituacao(event.target.value); setPagina(1);}}
             >
               <option value="Todas">Todas</option>
               <option value="Ativa">Ativas</option>
+              <option value="Vendida">Vendidas</option>
               <option value="Devolvida">
                 Devolvidas
               </option>
@@ -479,7 +438,7 @@ export function ConsignacoesPage() {
                     Carregando consignações...
                   </td>
                 </tr>
-              ) : consignacoesFiltradas.length ===
+              ) : consignacoes.length ===
                 0 ? (
                 <tr>
                   <td
@@ -490,7 +449,7 @@ export function ConsignacoesPage() {
                   </td>
                 </tr>
               ) : (
-                consignacoesFiltradas.map(
+                consignacoes.map(
                   (consignacao) => (
                     <tr
                       key={
@@ -622,6 +581,12 @@ export function ConsignacoesPage() {
             </tbody>
           </table>
         </div>
+        <nav className="orc-pagination" aria-label="Páginas de consignações">
+          <span>Página {pagina} de {paginas} · {total} registro(s) · 20 por página</span>
+          <div><button type="button" className="button secondary" disabled={carregando || pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
+          <button type="button" className="button secondary" disabled={carregando || pagina >= paginas} onClick={() => setPagina(pagina + 1)}>Próxima</button></div>
+        </nav>
+
       </div>
 
       <VeiculoModal
@@ -992,6 +957,7 @@ export function ConsignacoesPage() {
                   <input
                     type="date"
                     min={consignacaoDevolucao.data_entrada.slice(0, 10)}
+                    name="data_saida"
                     value={dataSaida}
                     onChange={(event) =>
                       setDataSaida(
@@ -1011,6 +977,7 @@ export function ConsignacoesPage() {
                   </span>
 
                   <textarea
+                    name="motivo_saida"
                     value={motivoSaida}
                     onChange={(event) =>
                       setMotivoSaida(
@@ -1022,11 +989,17 @@ export function ConsignacoesPage() {
                     required
                   />
                 </label>
+                <h3 className="full-width">Nota fiscal de saída da devolução</h3>
+                <label className="form-field">Número da nota *<input name="numero" required inputMode="numeric" pattern="[0-9]{1,9}" maxLength={9} /></label>
+                <label className="form-field">Série *<input name="serie" required inputMode="numeric" pattern="[0-9]{1,3}" maxLength={3} defaultValue="1" /></label>
+                <label className="form-field">Data de emissão *<input name="data_emissao" type="date" required defaultValue={obterDataAtual()} /></label>
+                <label className="form-field full-width">Chave de acesso (opcional)<input name="chave_acesso" inputMode="numeric" pattern="[0-9]{44}" maxLength={44} /></label>
+                <label className="form-field full-width">PDF da nota de saída (opcional)<input name="arquivo" type="file" accept=".pdf,application/pdf" /></label>
               </div>
             </form>
 
             <footer className="modal-footer">
-              <button
+              <button data-ui-nav="back"
                 type="button"
                 className="button button-secondary"
                 onClick={() =>

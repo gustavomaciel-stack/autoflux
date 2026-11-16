@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/AutorizacaoComercial.php';
+require_once __DIR__.'/ComissaoVenda.php';
 require_once __DIR__.'/ReservaOrcamento.php';
 require_once __DIR__.'/TrocaOrcamento.php';
 final class Orcamento {
@@ -19,10 +20,12 @@ final class Orcamento {
   $s=trim($v);if(mb_strlen($s)>$limite)throw new InvalidArgumentException('Texto maior que o limite permitido.');return $s;
  }
  public static function moeda(int $v): string { return ($v<0?'-':'').intdiv(abs($v),100).'.'.str_pad((string)(abs($v)%100),2,'0',STR_PAD_LEFT); }
- public static function sugerir(int $base,int $padrao,int $imposto): int {
-  if($imposto<0||$imposto>=10000)throw new InvalidArgumentException('Imposto estimado inválido.');
-  $alvo=$base+(int)round($base*$padrao/10000);
-  return (int)ceil($alvo*10000/(10000-$imposto));
+ public static function sugerir(int $custo,int $margem,int $imposto,int $comissao): int {
+  $saldo=10000-$margem-$imposto-$comissao;
+  if(min($margem,$imposto,$comissao)<0||$saldo<=0)throw new InvalidArgumentException('Margem-alvo, impostos e comissão do vendedor devem somar menos de 100%.');
+  $preco=intdiv($custo*10000+$saldo-1,$saldo);
+  if($preco<=0||$preco>999999999999)throw new InvalidArgumentException('O preço sugerido está fora do limite monetário.');
+  return $preco;
  }
  public static function taxa(array $composicao): int { return self::centavos($composicao['imposto_percentual']??'0'); }
  public static function calcular(int $base,int $valor,int $imposto=0,int $comissao=0): array {
@@ -42,7 +45,26 @@ final class Orcamento {
    'veiculos'=>$this->rows("SELECT c.id_ciclo,c.nosso_numero,v.marca,v.modelo,v.placa FROM ciclos_veiculo c JOIN veiculos v ON v.id_veiculo=c.id_veiculo WHERE c.data_encerramento IS NULL AND c.situacao_atual='Disponível' ORDER BY c.id_ciclo DESC")];
  }
  public function realizadas(int $id): array {
-  return $this->rows("SELECT d.id_despesa,d.descricao,d.valor,COALESCE(d.responsavel_despesa,'Revenda') responsavel_despesa FROM despesas_veiculo d JOIN ciclos_veiculo c ON c.id_ciclo=d.id_ciclo WHERE d.id_ciclo=? AND d.ativo=1 AND (d.responsavel_despesa='Revenda' OR (d.responsavel_despesa IS NULL AND c.origem_entrada<>'Consignação')) ORDER BY d.id_despesa".($this->pdo->inTransaction()?' FOR UPDATE':''),[$id]);
+  // Segue apenas retornos por cancelamento. Uma nova aquisição inicia outra cadeia de custos.
+  $sql = "WITH RECURSIVE ciclos_da_operacao AS (
+            SELECT id_ciclo FROM ciclos_veiculo WHERE id_ciclo = ?
+            UNION DISTINCT
+            SELECT x.id_ciclo_origem
+            FROM cancelamentos_venda_autoflux x
+            JOIN ciclos_da_operacao anterior ON anterior.id_ciclo = x.id_ciclo_retorno
+            WHERE x.id_ciclo_origem < x.id_ciclo_retorno
+          )
+          SELECT d.id_despesa, d.descricao, d.valor,
+                 COALESCE(d.responsavel_despesa, 'Revenda') AS responsavel_despesa,
+                 CASE WHEN c.id_ciclo <> ? THEN c.nosso_numero END AS ciclo_anterior
+          FROM despesas_veiculo d
+          JOIN ciclos_veiculo c ON c.id_ciclo = d.id_ciclo
+          WHERE d.id_ciclo IN (SELECT id_ciclo FROM ciclos_da_operacao)
+            AND d.ativo = 1
+            AND (d.responsavel_despesa = 'Revenda'
+                 OR (d.responsavel_despesa IS NULL AND c.origem_entrada <> 'Consignação'))
+          ORDER BY d.id_despesa";
+  return $this->rows($sql.($this->pdo->inTransaction()?' FOR UPDATE':''), [$id, $id]);
  }
  public function custoAtual(int $ciclo,array $pos=[]): array {
   $origem=$this->row("SELECT c.origem_entrada,a.valor_aquisicao,co.valor_repasse_acordado FROM ciclos_veiculo c LEFT JOIN aquisicoes a ON a.id_ciclo=c.id_ciclo LEFT JOIN consignacoes co ON co.id_ciclo=c.id_ciclo WHERE c.id_ciclo=?".($this->pdo->inTransaction()?' FOR UPDATE':''),[$ciclo]);
@@ -67,7 +89,7 @@ final class Orcamento {
   $ids=$d['despesas_realizadas']??[];if(!is_array($ids))throw new InvalidArgumentException('Selecione as despesas realizadas.');$ids=array_map([self::class,'id'],$ids);if(count(array_unique($ids))!==count($ids))throw new InvalidArgumentException('Despesa realizada duplicada.');
   $opcoes=[];foreach($this->realizadas($ciclo) as $item)$opcoes[(int)$item['id_despesa']]=$item;
   $selecionadas=[];$base=self::centavos($origem);foreach($ids as $id){if(!isset($opcoes[$id]))throw new DomainException('Uma despesa deixou de estar disponível. Atualize os detalhes.');$item=$opcoes[$id];$base+=self::centavos($item['valor']);$selecionadas[]=$item;}
-  $pos=self::posVenda($d['despesas_pos_venda']??[]);foreach($pos as $item)$base+=self::centavos($item['valor']);
+  $pos=self::posVenda($d['despesas_pos_venda']??[]);
   if($base<=0||$base>999999999999)throw new InvalidArgumentException('A base comercial ultrapassa o limite permitido.');
   return array_merge(['modelo'=>3,'base_origem'=>$origem,'realizadas'=>$selecionadas,'pos_venda'=>$pos,'base'=>self::moeda($base)],$this->custoAtual($ciclo,$pos));
  }
@@ -84,8 +106,7 @@ final class Orcamento {
   if($origem===null)throw new DomainException('Informe a aquisição ou o repasse antes de criar o orçamento.');
   $c['valor_base']=self::moeda(self::centavos($origem));
   $c['consignado']=$consignado;
-  $vendedores=$usuario?$this->rows('SELECT percentual_comissao FROM vendedores WHERE id_usuario=? AND ativo=1'.($this->pdo->inTransaction()?' FOR UPDATE':''),[$usuario]):[];
-  $c['comissao_percentual']=$vendedores[0]['percentual_comissao']??'0.00';
+  $c['comissao_percentual']=$usuario?ComissaoVenda::percentual($this->pdo,$usuario):'0.00';
   $c['imposto_percentual']=$p['percentual_imposto_estimado'];
   $c['custo_total']=$this->custoAtual($id)['custo_total'];
   // Custo informativo usa aquisição para próprio; consignado não tem capital de aquisição.
@@ -103,10 +124,25 @@ final class Orcamento {
    for($i=0;$i<8;$i++)$args[]=$termo;
   }
   $situacao=self::texto($f['situacao']??'',40);
-  if($situacao==='andamento')$where[]="o.situacao IN ('Em negociação','Aguardando aprovação','Autorizado')";
-  elseif($situacao!==''){
-   if(!in_array($situacao,['Em negociação','Aguardando aprovação','Autorizado','Cancelado','Convertido em pedido'],true))throw new InvalidArgumentException('Situação inválida.');
+  $situacoesAtivas=['Em negociação','Aguardando aprovação','Autorizado'];
+  $filtroAtivas="o.situacao IN ('Em negociação','Aguardando aprovação','Autorizado')";
+  $hoje=(new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+  $incluirVencidos=($f['incluirVencidos']??'')==='1';
+  if($situacao==='andamento'||$situacao==='Vencido'){
+   $where[]=$filtroAtivas;
+   if($situacao==='Vencido'||!$incluirVencidos){
+    $where[]=$situacao==='Vencido'?'o.data_validade<?':'o.data_validade>=?';
+    $args[]=$hoje;
+   }
+  }elseif($situacao!==''){
+   if(!in_array($situacao,[...$situacoesAtivas,'Cancelado','Desistência','Convertido em pedido'],true))throw new InvalidArgumentException('Situação inválida.');
    $where[]='o.situacao=?';$args[]=$situacao;
+   if(!$incluirVencidos&&in_array($situacao,$situacoesAtivas,true)){
+    $where[]='o.data_validade>=?';$args[]=$hoje;
+   }
+  }elseif(isset($f['incluirVencidos'])&&!$incluirVencidos){
+   $where[]="(NOT ($filtroAtivas) OR o.data_validade>=?)";
+   $args[]=$hoje;
   }
   foreach(['inicio','fim'] as $campo){
    $valor=self::texto($f[$campo]??'',10);
@@ -134,7 +170,7 @@ final class Orcamento {
   $pagina=min(self::id($f['pagina']??1),$paginas);$offset=($pagina-1)*20;
   return ['itens'=>$this->listar($sqlWhere,$args,'LIMIT 20 OFFSET '.$offset),'total'=>$total,'pagina'=>$pagina,'paginas'=>$paginas,'aguardando'=>(int)$resumo['aguardando'],'autorizados'=>(int)$resumo['autorizados']];
  }
- public function listar(string $where="",array $args=[],string $limite=""): array {$lista=$this->rows('SELECT o.*,COALESCE((SELECT r.valor_sinal FROM reservas_orcamento r WHERE r.id_orcamento=o.id_orcamento AND r.data_liberacao IS NULL LIMIT 1),0) sinal_ativo,c.nosso_numero,v.marca,v.modelo,v.placa,cli.nome_razao_social cliente,u.nome vendedor FROM orcamentos o JOIN ciclos_veiculo c ON c.id_ciclo=o.id_ciclo JOIN veiculos v ON v.id_veiculo=c.id_veiculo JOIN clientes cli ON cli.id_cliente=o.id_cliente JOIN vendedores vd ON vd.id_vendedor=o.id_vendedor JOIN usuarios u ON u.id_usuario=vd.id_usuario '.$where.' ORDER BY o.data_orcamento DESC,o.id_orcamento DESC '.$limite,$args);
+ public function listar(string $where="",array $args=[],string $limite=""): array {$args[]=(new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');$lista=$this->rows('SELECT o.*,COALESCE((SELECT r.valor_sinal FROM reservas_orcamento r WHERE r.id_orcamento=o.id_orcamento AND r.data_liberacao IS NULL LIMIT 1),0) sinal_ativo,c.nosso_numero,v.marca,v.modelo,v.placa,cli.nome_razao_social cliente,u.nome vendedor FROM orcamentos o JOIN ciclos_veiculo c ON c.id_ciclo=o.id_ciclo JOIN veiculos v ON v.id_veiculo=c.id_veiculo JOIN clientes cli ON cli.id_cliente=o.id_cliente JOIN vendedores vd ON vd.id_vendedor=o.id_vendedor JOIN usuarios u ON u.id_usuario=vd.id_usuario '.$where.' ORDER BY CASE WHEN o.data_validade>=? THEN 0 ELSE 1 END,o.data_orcamento DESC,o.id_orcamento DESC '.$limite,$args);
   if(!$lista)return [];
   $ids=implode(',',array_unique(array_map(static fn($o)=>(int)$o['id_ciclo'],$lista)));
   $custos=$this->rows("SELECT c.id_ciclo,CASE WHEN c.origem_entrada='Consignação' THEN co.valor_repasse_acordado ELSE a.valor_aquisicao END origem,COALESCE(d.total,0) despesas FROM ciclos_veiculo c LEFT JOIN aquisicoes a ON a.id_ciclo=c.id_ciclo LEFT JOIN consignacoes co ON co.id_ciclo=c.id_ciclo LEFT JOIN (SELECT d.id_ciclo,SUM(d.valor) total FROM despesas_veiculo d JOIN ciclos_veiculo c ON c.id_ciclo=d.id_ciclo WHERE d.id_ciclo IN ($ids) AND d.ativo=1 AND (d.responsavel_despesa='Revenda' OR (d.responsavel_despesa IS NULL AND c.origem_entrada<>'Consignação')) GROUP BY d.id_ciclo) d ON d.id_ciclo=c.id_ciclo WHERE c.id_ciclo IN ($ids)");
@@ -153,12 +189,16 @@ final class Orcamento {
   $o['previsoes']=json_decode($o['previsoes_preservadas'],true,512,JSON_THROW_ON_ERROR);
   $o['autorizacoes']=$this->rows('SELECT a.*,s.nome solicitante,u.nome aprovador FROM aprovacoes_orcamento a JOIN usuarios s ON s.id_usuario=a.id_usuario_solicitante LEFT JOIN usuarios u ON u.id_usuario=a.id_usuario_aprovador WHERE a.id_orcamento=? ORDER BY a.id_aprovacao DESC',[$id]);
   $o['historico']=$this->rows('SELECT n.*,u.nome usuario_responsavel FROM negociacoes_orcamento n JOIN usuarios u ON u.id_usuario=n.id_usuario_responsavel WHERE n.id_orcamento=? ORDER BY n.id_negociacao DESC',[$id]);
+  $o['versionamentos']=array_values(array_filter($o['historico'],fn($h)=>$h['tipo_registro']==='Versionamento'));
+  $o['historico']=array_values(array_filter($o['historico'],fn($h)=>$h['tipo_registro']!=='Versionamento'));
+  foreach($o['versionamentos'] as &$versao){$snapshot=json_decode($versao['composicao_comercial']??'{}',true,512,JSON_THROW_ON_ERROR);$versao['validade_anterior']=$snapshot['versionamento']['validade_anterior']??null;$versao['validade_nova']=$snapshot['versionamento']['validade_nova']??null;}unset($versao);
   $o=array_merge($o,(new ReservaOrcamento($this->pdo))->detalhes($id));
   $o=array_merge($o,(new TrocaOrcamento($this->pdo))->detalhes($id));
   $o['saldo_proposta']=TrocaOrcamento::saldo(self::centavos($o['valor_negociado_atual']),self::centavos($o['valor_troca']),self::centavos($o['reserva_ativa']['valor_sinal']??'0'));return $o;
  }
- private function registrar(int $id,int $usuario,string $tipo,string $valor,array $calc,?string $obs): void {
-  $snapshot=$this->row('SELECT base_comercial_planejada,preco_sugerido,composicao_comercial FROM orcamentos WHERE id_orcamento=?',[$id]);
+ private function registrar(int $id,int $usuario,string $tipo,string $valor,array $calc,?string $obs,array $metadados=[]): void {
+  $snapshot=$this->row('SELECT base_comercial_planejada,preco_sugerido,composicao_comercial,data_validade FROM orcamentos WHERE id_orcamento=?',[$id]);
+  $snapshot=array_merge($snapshot,$metadados);
   $q=$this->pdo->prepare('INSERT INTO negociacoes_orcamento(id_orcamento,id_usuario_responsavel,tipo_registro,valor_proposto,resultado_previsto,margem_prevista,observacoes,composicao_comercial) VALUES(?,?,?,?,?,?,?,?)');$q->execute([$id,$usuario,$tipo,$valor,$calc['resultado_previsto'],$calc['margem_prevista'],$obs,json_encode($snapshot,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
  }
  public function criar(array $d,int $usuario,bool $gestor=false): int {
@@ -181,8 +221,7 @@ final class Orcamento {
    $composicao['imposto_percentual']=$b['imposto_percentual'];
    $composicao['impostos_config']=!empty($p['impostos_config'])?json_decode($p['impostos_config'],true,512,JSON_THROW_ON_ERROR):null;
    $composicao['imposto_status']='Estimativa sobre o valor total da venda, sujeita à validação contábil';
-   $padrao=self::centavos($p['percentual_padrao']);$sugerido=self::sugerir($base,$padrao,self::taxa($composicao));
-   if($sugerido>999999999999)throw new InvalidArgumentException('O preço sugerido ultrapassa o limite monetário.');
+   $padrao=self::centavos($p['percentual_padrao']);$sugerido=self::sugerir($base,$padrao,self::taxa($composicao),self::centavos($composicao['comissao_percentual']));
    // O cliente deve confirmar a mesma composição mostrada na tela; não salva preço antigo sobre base nova.
    if(self::centavos($d['base_confirmada']??null)!==$base||self::centavos($d['preco_confirmado']??null)!==$sugerido)throw new DomainException('A aquisição, o repasse ou as despesas mudaram. Atualize os valores antes de salvar.');
    $valor=self::centavos($d['valor_negociado']??null);$calc=self::calcular(self::centavos($composicao['custo_total']),$valor,self::taxa($composicao),self::centavos($composicao['comissao_percentual']??'0'));
@@ -195,13 +234,17 @@ final class Orcamento {
    $this->registrar($novo,$usuario,'Proposta inicial',self::moeda($valor),$calc,$obs?:null);
    if($situacao==='Aguardando aprovação')AutorizacaoComercial::solicitar($this->pdo,$novo,$usuario);
    if($gestor){if($situacao==='Aguardando aprovação')AutorizacaoComercial::aprovarPeloGestor($this->pdo,$novo,$usuario);else{$q=$this->pdo->prepare("UPDATE orcamentos SET situacao='Autorizado' WHERE id_orcamento=?");$q->execute([$novo]);$this->registrar($novo,$usuario,'Autorização pelo gestor',self::moeda($valor),$calc,'Autorização direta pelo usuário Gestão/Diretoria que criou a proposta.');}}
-   if(isset($d['troca'])){
-    if(!is_array($d['troca']))throw new InvalidArgumentException('Dados da troca inválidos.');
-    $oferta=$d['troca'];$troca=new TrocaOrcamento($this->pdo);
+   if(isset($d['trocas'])||isset($d['troca'])){
+    $ofertas=$d['trocas']??[$d['troca']];
+    if(!is_array($ofertas)||!array_is_list($ofertas)||count($ofertas)>100)throw new InvalidArgumentException('Lista de trocas inválida (máximo 100).');
+    foreach($ofertas as $oferta){
+    if(!is_array($oferta))throw new InvalidArgumentException('Dados da troca inválidos.');
+    $troca=new TrocaOrcamento($this->pdo);
     if(!$gestor&&array_key_exists('valor_avaliado',$oferta))throw new InvalidArgumentException('Somente Gestão/Diretoria pode registrar avaliação na criação do orçamento.');
     if($gestor)$oferta['valor_solicitado']='';
     $troca->registrarOferta(['id_orcamento'=>$novo,'id_cliente'=>$cliente],$oferta,$usuario);
     if($gestor)$troca->avaliarNaCriacaoPeloGestor($novo,$oferta['valor_avaliado']??null,$usuario);
+   }
    }
    $this->pdo->commit();return $novo;
   }catch(Throwable $e){if($this->pdo->inTransaction())$this->pdo->rollBack();throw $e;}
@@ -211,7 +254,7 @@ final class Orcamento {
    $o=$this->row('SELECT * FROM orcamentos WHERE id_orcamento=? FOR UPDATE',[$id]);
    if(!in_array($o['situacao'],['Em negociação','Aguardando aprovação','Autorizado'],true))throw new DomainException('Este orçamento não permite alterações.');
    if(!is_string($d['situacao_anterior']??null)||$d['situacao_anterior']!==$o['situacao'])throw new DomainException('A situação mudou. Atualize os detalhes antes de alterar.');
-   $ultimo=$this->row('SELECT id_negociacao FROM negociacoes_orcamento WHERE id_orcamento=? ORDER BY id_negociacao DESC LIMIT 1',[$id]);
+   $ultimo=$this->row('SELECT id_negociacao FROM negociacoes_orcamento WHERE id_orcamento=? AND tipo_registro<>\'Versionamento\' ORDER BY id_negociacao DESC LIMIT 1',[$id]);
    if(self::id($d['id_negociacao_anterior']??null)!==(int)$ultimo['id_negociacao'])throw new DomainException('Outra pessoa alterou a proposta. Reabra os detalhes.');
    $c=$this->row('SELECT situacao_atual,data_encerramento FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE',[$o['id_ciclo']]);
    $reserva=new ReservaOrcamento($this->pdo);
@@ -219,7 +262,18 @@ final class Orcamento {
    $motivo=self::texto($d['justificativa']??'',5000);if($motivo==='')throw new InvalidArgumentException('Informe a justificativa, com até 5.000 caracteres.');
    $acao=$d['acao']??'ajustar';
    if(in_array($acao,['reservar','sinal','solicitar','autorizar'],true))$this->conferirCusto($o);
-   if(in_array($acao,['reservar','sinal','liberar_reserva'],true)){
+   if($acao==='versionar'){
+    $hoje=new DateTimeImmutable('today',new DateTimeZone('America/Sao_Paulo'));
+    if($o['data_validade']>=$hoje->format('Y-m-d'))throw new DomainException('Este orçamento ainda está dentro da validade.');
+    if(($d['data_validade_anterior']??null)!==$o['data_validade'])throw new DomainException('A validade mudou. Atualize os detalhes antes de versionar.');
+    $reserva->conferirCiclo((int)$o['id_ciclo'],$id);$propria=$reserva->ativa((int)$o['id_ciclo']);
+    if($c['data_encerramento']!==null||!in_array($c['situacao_atual'],['Disponível','Reservado'],true)||($c['situacao_atual']==='Reservado'&&!$propria))throw new DomainException('O veículo não está disponível para renovar este orçamento.');
+    $novaValidade=$hoje->modify('+7 days')->format('Y-m-d');
+    $texto='Validade renovada de '.(new DateTimeImmutable($o['data_validade']))->format('d/m/Y').' para '.(new DateTimeImmutable($novaValidade))->format('d/m/Y').'. Valores e situação comercial preservados.';
+    $this->registrar($id,$usuario,'Versionamento',$o['valor_negociado_atual'],['resultado_previsto'=>$o['resultado_previsto'],'margem_prevista'=>$o['margem_prevista']],$texto,['versionamento'=>['validade_anterior'=>$o['data_validade'],'validade_nova'=>$novaValidade,'situacao'=>$o['situacao']],'trocas'=>(new TrocaOrcamento($this->pdo))->detalhes($id),'reserva'=>$propria?:null]);
+    $q=$this->pdo->prepare('UPDATE orcamentos SET data_validade=? WHERE id_orcamento=?');$q->execute([$novaValidade,$id]);
+   }elseif(in_array($acao,['reservar','sinal','liberar_reserva'],true)){
+
     if($acao==='reservar')$reserva->reservar($o,$c,$d,$usuario);
     elseif($acao==='sinal')$reserva->sinal($o,$d,$usuario);
     else {if(mb_strlen($motivo)>255)throw new InvalidArgumentException('Motivo de liberação: máximo de 255 caracteres.');$reserva->liberar($o,$d,$usuario,$motivo,true);}
@@ -255,9 +309,8 @@ final class Orcamento {
     $calc=self::calcular(self::centavos($custos['custo_total']),$valor,self::taxa($nova),self::centavos($nova['comissao_percentual']??'0'));
     $nova['impostos_estimados']=$calc['impostos_estimados'];
     $nova['comissao_estimada']=$calc['comissao_estimada'];
-    $mudouComposicao=$nova!==$anterior;
-    $sugeridoNovo=$mudouComposicao?self::sugerir($baseNova,self::centavos($o['percentual_padrao_utilizado']),self::taxa($nova)):self::centavos($o['preco_sugerido']);
-    if($sugeridoNovo>999999999999)throw new InvalidArgumentException('Preço sugerido ultrapassa o limite permitido.');
+    $sugeridoNovo=self::sugerir($baseNova,self::centavos($o['percentual_padrao_utilizado']),self::taxa($nova),self::centavos($nova['comissao_percentual']));
+    $mudouComposicao=$nova!==$anterior||$sugeridoNovo!==self::centavos($o['preco_sugerido']);
     if($o['situacao']==='Autorizado'&&!$mudouComposicao&&$valor===self::centavos($o['valor_negociado_atual']))throw new InvalidArgumentException('O valor não mudou. A autorização atual continua válida; abandone a alteração ou informe um novo valor.');
     $situacao=(float)$calc['margem_prevista']<(float)$o['percentual_minimo_aplicado']?'Aguardando aprovação':'Em negociação';
     $q=$this->pdo->prepare('UPDATE orcamentos SET valor_negociado_atual=?,resultado_previsto=?,margem_prevista=?,situacao=? WHERE id_orcamento=?');$q->execute([self::moeda($valor),$calc['resultado_previsto'],$calc['margem_prevista'],$situacao,$id]);

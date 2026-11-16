@@ -47,6 +47,8 @@ try {
         [$modulo,$acao]=array_pad(explode('.', $codigo, 2),2,'');
         if ($acao!=='visualizar' && in_array($modulo,['veiculos','despesas','consignacoes','fornecedores','clientes'],true)) $codigos[]=$modulo.'.visualizar';
         if ($modulo==='orcamentos' && $acao==='gerenciar') { $codigos[]='orcamentos.visualizar'; $codigos[]='vendas.visualizar'; $codigos[]='clientes.visualizar'; }
+        if ($codigo==='vendas.cancelar_concluida') $codigos[]='pedidos.visualizar';
+        if ($modulo==='pedidos' && $acao==='gerenciar') $codigos[]='pedidos.visualizar';
         if ($modulo==='despesas') $codigos[]='custos.visualizar';
         if (in_array($modulo,['vendas','consignacoes','notas','despesas','custos'],true)) $codigos[]='veiculos.visualizar';
         if ($modulo==='consignacoes' && $acao==='cadastrar') { $codigos[]='clientes.visualizar'; $codigos[]='clientes.cadastrar'; }

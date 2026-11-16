@@ -13,7 +13,17 @@ export interface VeiculoHistorico {
   data_atualizacao: string;
 }
 
+export interface VendaHistoricoCiclo {
+  id_venda: number;
+  id_pedido: number;
+  numero_pedido: string;
+  valor_final: string;
+  data_venda: string;
+  situacao_pedido: string;
+}
+
 export interface CicloHistorico {
+  vendas?: VendaHistoricoCiclo[];
   id_ciclo: number;
   nosso_numero: string;
   origem_entrada: string;

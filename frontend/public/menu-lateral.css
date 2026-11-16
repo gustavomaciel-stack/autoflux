@@ -1,0 +1,87 @@
+.menu-lateral-botao,
+.menu-lateral-fundo {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  html.menu-lateral-bloqueio {
+    overflow: hidden;
+  }
+
+  .topbar:has(.menu-lateral-botao) {
+    position: relative;
+    height: auto;
+    min-height: 64px;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .topbar .menu-lateral-botao {
+    display: grid;
+    place-items: center;
+    order: 0;
+    z-index: 53;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    border: 1px solid #627495;
+    border-radius: 8px;
+    background: #192b49;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+  }
+
+  .topbar.menu-lateral-aberto .menu-lateral-botao {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+  }
+
+  .topbar.menu-lateral-aberto .menu-lateral-fundo:not([hidden]) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 51;
+    background: rgb(7 15 28 / 60%);
+  }
+
+  .topbar:has(.menu-lateral-botao) .main-nav {
+    display: none;
+  }
+
+  .topbar.menu-lateral-aberto .main-nav {
+    display: flex;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 52;
+    width: min(320px, 86vw);
+    height: 100dvh;
+    box-sizing: border-box;
+    flex-flow: column nowrap;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 4px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 66px 12px 20px;
+    background: #101d33;
+  }
+
+  .topbar.menu-lateral-aberto .main-nav button {
+    width: 100%;
+    min-height: 44px;
+    text-align: left;
+    font-size: 15px;
+    white-space: normal;
+  }
+
+  .topbar.menu-lateral-aberto .nav-dropdown-menu {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    margin: 4px 0 6px;
+  }
+}

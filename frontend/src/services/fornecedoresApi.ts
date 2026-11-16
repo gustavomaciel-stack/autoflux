@@ -63,8 +63,11 @@ export async function buscarFornecedor(
 
 export async function cadastrarFornecedor(
   dados: FornecedorFormData,
+  origem?: "despesa",
 ): Promise<ApiResponse<never>> {
-  const resposta = await apiFetch(API_URL, {
+  const url = new URL(API_URL, window.location.href);
+  if (origem) url.searchParams.set("origem", origem);
+  const resposta = await apiFetch(url, {
     method: "POST",
 
     headers: {

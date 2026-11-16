@@ -6,6 +6,10 @@ try {
     Auth::proteger();$usuario=Auth::usuario();$metodo=$_SERVER['REQUEST_METHOD']??'GET';
     date_default_timezone_set('America/Sao_Paulo');$pdo=Database::conectar();$pdo->exec("SET time_zone='-03:00'");$m=new TrocaOrcamento($pdo);
     if($metodo==='GET'){
+        if(isset($_GET['buscar_placa'])) {
+            if(!Auth::permite('trocas.gerenciar')&&!Auth::permite('trocas.visualizar')) Auth::exigir('trocas.visualizar');
+            Auth::responder(200,['sucesso'=>true,'dados'=>$m->buscarVeiculo((string)$_GET['buscar_placa'])]);
+        }
         Auth::exigir('trocas.visualizar');
         $dados=isset($_GET['id_orcamento'])?$m->contexto(Orcamento::id($_GET['id_orcamento'])):$m->listar($_GET);
         Auth::responder(200,['sucesso'=>true,'dados'=>$dados]);

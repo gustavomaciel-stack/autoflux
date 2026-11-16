@@ -1,0 +1,40 @@
+.nf-saida-consulta { width: min(950px, calc(100vw - 32px)); max-height: 92vh; padding: 0; border: 0; border-radius: 20px; color: #19263b; }
+.nf-saida-consulta[open] { display: flex; flex-direction: column; }
+.nf-saida-consulta::backdrop { background: rgba(12, 24, 40, .6); backdrop-filter: blur(3px); }
+.nf-saida-consulta .modal-body { overflow-y: auto; padding: 28px 30px; }
+.nf-saida-consulta .modal-header, .nf-saida-consulta .modal-footer { flex-shrink: 0; }
+.nf-saida-consulta .modal-body > h3 { margin: 28px 0 20px; }
+.nf-saida-consulta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.nf-saida-linha-inteira { grid-column: 1 / -1; }
+.nf-saida-consulta input { width: 100%; background: #f9fbfd; }
+.nf-saida-arquivo { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.nf-saida-arquivo span { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .nf-saida-consulta-grid { grid-template-columns: 1fr; } .nf-saida-arquivo { flex-direction: column; align-items: stretch; } }
+
+.nf-saida-consulta .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 30px;
+  border-top: 1px solid #e1e8f2;
+  background: #fafbfd;
+}
+.nf-saida-consulta .modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8996aa;
+  font: inherit;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+.nf-saida-consulta .modal-close:hover { background: #eef3fa; color: #34445c; }
+.nf-saida-consulta .modal-close:focus-visible { outline: 2px solid #1765ed; outline-offset: 2px; }

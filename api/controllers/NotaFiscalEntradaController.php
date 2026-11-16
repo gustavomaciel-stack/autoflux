@@ -12,17 +12,20 @@ final class NotaFiscalEntradaController
             new NotaFiscalEntrada($conexao);
     }
 
-    public function listar(): void
+    public function listar(?array $filtros = null): void
     {
         try {
             $notasFiscais =
-                $this->notaFiscalEntrada->listarTodos();
+                $filtros === null ? $this->notaFiscalEntrada->listarTodos() : $this->notaFiscalEntrada->listarPagina($filtros);
 
             $this->responder(200, [
                 "sucesso" => true,
                 "dados" => $notasFiscais,
             ]);
+        } catch (InvalidArgumentException $erro) {
+            $this->responder(422, ["sucesso" => false, "mensagem" => $erro->getMessage()]);
         } catch (Throwable $erro) {
+            error_log('Consulta de notas fiscais de entrada: '.$erro->getMessage());
             $this->responder(500, [
                 "sucesso" => false,
                 "mensagem" =>

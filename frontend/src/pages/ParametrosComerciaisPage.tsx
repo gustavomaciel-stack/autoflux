@@ -25,6 +25,14 @@ export function ParametrosComerciaisPage() {
   const [salvando,setSalvando] = useState(false);
   const [erro,setErro] = useState('');
   const [sucesso,setSucesso] = useState('');
+  const [todasVersoes,setTodasVersoes] = useState(false);
+  const [anoHistorico,setAnoHistorico] = useState('');
+  const [mesHistorico,setMesHistorico] = useState('');
+  const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const historico=[...dados.historico].sort((a,b)=>b.inicio_vigencia.localeCompare(a.inicio_vigencia)||Number(b.id_parametro)-Number(a.id_parametro));
+  const anos=[...new Set(historico.map(p=>p.inicio_vigencia.slice(0,4)))].sort().reverse();
+  const filtrado=historico.filter(p=>(!anoHistorico||p.inicio_vigencia.slice(0,4)===anoHistorico)&&(!mesHistorico||p.inicio_vigencia.slice(5,7)===mesHistorico));
+  const periodos=[...new Set(filtrado.map(p=>p.inicio_vigencia.slice(0,7)))];
   const carregar = useCallback(async () => {
     if (!autorizado) { setCarregando(false); return; }
     setCarregando(true); setErro('');
@@ -43,6 +51,9 @@ export function ParametrosComerciaisPage() {
     catch(e) { setErro(e instanceof Error ? e.message : 'Não foi possível salvar os parâmetros.'); }
     finally { setSalvando(false); }
   }
+  function tabelaHistorico(itens:DadosParametros['historico']) { return (<section className="table-card"><div className="table-scroll"><table><thead><tr><th>Versão</th><th>Margem-alvo da revenda</th><th>Margem mínima</th><th>Impostos estimados</th><th>Início da vigência</th><th>Fim da vigência</th><th>Usuário</th><th>Situação</th></tr></thead><tbody>
+        {itens.length ? itens.map(p => <tr key={p.id_parametro}><td>#{p.id_parametro}</td><td>{percentual(p.percentual_padrao)}</td><td>{percentual(p.percentual_minimo)}</td><td>{percentual(p.percentual_imposto_estimado)}{p.impostos&&<DetalhesImpostos impostos={p.impostos}/>}</td><td>{data(p.inicio_vigencia)}</td><td>{data(p.fim_vigencia)}</td><td>{p.usuario_responsavel}</td><td><span className={`status ${p.ativo ? 'active' : 'inactive'}`}>{p.ativo ? 'Vigente' : 'Encerrado'}</span></td></tr>) : <tr><td colSpan={8} className="empty-state">Nenhuma versão cadastrada.</td></tr>}
+      </tbody></table></div></section>); }
   return <Layout>
     <div className="breadcrumb"><span>Configurações</span><span>/</span><strong>Parâmetros comerciais</strong></div>
     {!autorizado ? <div className="alert error">Acesso exclusivo de Gestão/Diretoria.</div> : <>
@@ -54,7 +65,7 @@ export function ParametrosComerciaisPage() {
         <h2>Condição vigente</h2>
         {editando ? <form onSubmit={salvar}>
           <fieldset className="parametros-campos" disabled={salvando}>
-            <label className="field"><span>Comissão revenda (%) *</span><input type="number" min="0" max="100" step="0.01" value={padrao} onChange={e => setPadrao(e.target.value)} required /><small>Acréscimo utilizado para sugerir o preço.</small></label>
+            <label className="field"><span>Margem-alvo da revenda (%) *</span><input type="number" min="0" max="100" step="0.01" value={padrao} onChange={e => setPadrao(e.target.value)} required /><small>Percentual do preço de venda que deve sobrar após custos, impostos estimados e comissão do vendedor.</small></label>
             <label className="field"><span>Margem mínima (%) *</span><input type="number" min="0" max="100" step="0.01" value={minimo} onChange={e => setMinimo(e.target.value)} required /><small>Limite para identificar negociações que exigem aprovação.</small></label>
           
           </fieldset>
@@ -65,18 +76,23 @@ export function ParametrosComerciaisPage() {
             <p><strong>Total estimado no orçamento: {percentual(String(imposto))}</strong></p><small>O total é arredondado para duas casas decimais. Estimativa gerencial sujeita à validação contábil.</small>
           </fieldset>
           <p>A nova versão passa a vigorar na confirmação. Data, hora e usuário são registrados automaticamente.</p>
-          <div className="parametros-acoes"><button className="button secondary" type="button" disabled={salvando} onClick={() => { setEditando(false); setErro(''); }}>Cancelar</button><button className="button primary" type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar parâmetros'}</button></div>
+          <div className="parametros-acoes"><button data-ui-nav="back" className="button secondary" type="button" disabled={salvando} onClick={() => { setEditando(false); setErro(''); }}>Cancelar</button><button className="button primary" type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar parâmetros'}</button></div>
         </form> : <>
-          {dados.vigente ? <dl className="parametros-resumo"><div><dt>Comissão revenda</dt><dd>{percentual(dados.vigente.percentual_padrao)}</dd></div><div><dt>Impostos estimados</dt><dd>{percentual(dados.vigente.percentual_imposto_estimado)}</dd></div><div><dt>Margem mínima</dt><dd>{percentual(dados.vigente.percentual_minimo)}</dd></div><div><dt>Início da vigência</dt><dd>{data(dados.vigente.inicio_vigencia)}</dd></div><div><dt>Usuário responsável</dt><dd>{dados.vigente.usuario_responsavel}</dd></div></dl> : <p>Nenhum parâmetro cadastrado. Informe os percentuais antes de iniciar os orçamentos.</p>}
+          {dados.vigente ? <dl className="parametros-resumo"><div><dt>Margem-alvo da revenda</dt><dd>{percentual(dados.vigente.percentual_padrao)}</dd></div><div><dt>Impostos estimados</dt><dd>{percentual(dados.vigente.percentual_imposto_estimado)}</dd></div><div><dt>Margem mínima</dt><dd>{percentual(dados.vigente.percentual_minimo)}</dd></div><div><dt>Início da vigência</dt><dd>{data(dados.vigente.inicio_vigencia)}</dd></div><div><dt>Usuário responsável</dt><dd>{dados.vigente.usuario_responsavel}</dd></div></dl> : <p>Nenhum parâmetro cadastrado. Informe os percentuais antes de iniciar os orçamentos.</p>}
           {dados.vigente?.impostos&&<DetalhesImpostos impostos={dados.vigente.impostos}/>}
           <button type="button" className="button primary" disabled={Boolean(erro)} onClick={editar}>{dados.vigente ? 'Editar parâmetros' : 'Cadastrar parâmetros'}</button>
         </>}
       </section>}
       <p>Os orçamentos deverão preservar a versão usada em sua elaboração. A comissão do vendedor é configurada em <a href="#usuarios">Cadastros → Usuários</a>, selecionando o perfil Vendedor.</p>
-      <h2>Histórico de versões</h2>
-      <section className="table-card"><div className="table-scroll"><table><thead><tr><th>Versão</th><th>Comissão revenda</th><th>Margem mínima</th><th>Impostos estimados</th><th>Início da vigência</th><th>Fim da vigência</th><th>Usuário</th><th>Situação</th></tr></thead><tbody>
-        {dados.historico.length ? dados.historico.map(p => <tr key={p.id_parametro}><td>#{p.id_parametro}</td><td>{percentual(p.percentual_padrao)}</td><td>{percentual(p.percentual_minimo)}</td><td>{percentual(p.percentual_imposto_estimado)}{p.impostos&&<DetalhesImpostos impostos={p.impostos}/>}</td><td>{data(p.inicio_vigencia)}</td><td>{data(p.fim_vigencia)}</td><td>{p.usuario_responsavel}</td><td><span className={`status ${p.ativo ? 'active' : 'inactive'}`}>{p.ativo ? 'Vigente' : 'Encerrado'}</span></td></tr>) : <tr><td colSpan={8} className="empty-state">Nenhuma versão cadastrada.</td></tr>}
-      </tbody></table></div></section>
+      <section className="parametros-historico" aria-label="Histórico de versões">
+        <header className="parametros-historico-heading"><div><h2>Histórico de versões</h2><p>{todasVersoes?'Todas as alterações, agrupadas pelo início da vigência.':'As três versões mais recentes, incluindo a vigente.'}</p></div><button type="button" className="button secondary" aria-expanded={todasVersoes} onClick={()=>{setTodasVersoes(v=>!v);setAnoHistorico('');setMesHistorico('');}}>{todasVersoes?'Mostrar últimas 3 versões':'Ver todas as alterações'}</button></header>
+        {!todasVersoes?tabelaHistorico(historico.slice(0,3)):<>
+          <div className="parametros-historico-filtros"><label className="field">Ano<select value={anoHistorico} onChange={e=>setAnoHistorico(e.target.value)}><option value="">Todos os anos</option>{anos.map(ano=><option key={ano}>{ano}</option>)}</select></label><label className="field">Mês<select value={mesHistorico} onChange={e=>setMesHistorico(e.target.value)}><option value="">Todos os meses</option>{meses.map((mes,i)=><option key={mes} value={String(i+1).padStart(2,'0')}>{mes}</option>)}</select></label><button type="button" className="button secondary" onClick={()=>{setAnoHistorico('');setMesHistorico('');}}>Limpar filtros</button></div>
+          <p className="parametros-historico-contagem" role="status">{filtrado.length} {filtrado.length===1?'versão encontrada':'versões encontradas'}</p>
+          {periodos.map((periodo,i)=>{const itens=filtrado.filter(p=>p.inicio_vigencia.startsWith(periodo));return <details className="parametros-periodo" key={periodo} open={i===0||undefined}><summary>{meses[Number(periodo.slice(5,7))-1]} / {periodo.slice(0,4)}<span>{itens.length} {itens.length===1?'versão':'versões'}</span></summary>{tabelaHistorico(itens)}</details>;})}
+          {!filtrado.length&&<p className="empty-state">Nenhuma alteração encontrada neste período.</p>}
+        </>}
+      </section>
     </>}
   </Layout>;
 }

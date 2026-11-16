@@ -12,3 +12,8 @@ export function podeConsultarOrcamentos(usuario: UsuarioAutenticado | null): boo
 export function podeGerenciarOrcamentos(usuario: UsuarioAutenticado | null): boolean {
   return possuiPermissao(usuario, 'orcamentos.gerenciar');
 }
+
+export function podeConsultarHistoricoCliente(usuario: UsuarioAutenticado | null): boolean {
+  return podeGerenciarClientes(usuario) && podeConsultarOrcamentos(usuario)
+    && possuiPermissao(usuario, 'pedidos.visualizar');
+}

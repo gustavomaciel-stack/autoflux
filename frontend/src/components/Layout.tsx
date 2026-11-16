@@ -1,6 +1,9 @@
-import { podeGerenciarClientes, podeConsultarOrcamentos } from "../services/clientesAcesso";
+import { SinoAvaliacoes } from './SinoAvaliacoes';
+import {useEmpresa} from "../context/EmpresaContext";
+import { podeGerenciarClientes, podeConsultarOrcamentos, podeConsultarHistoricoCliente } from "../services/clientesAcesso";
 import { Permissao } from "./Permissao";
 import "./SessionActions.css";
+import "./LayoutNav.css";
 import { useAuth } from "../context/AuthContext";
 import { AlterarSenhaModal } from "./AlterarSenhaModal";
 import { useState, type ReactNode } from "react";
@@ -11,6 +14,13 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { usuario, encerrar, pode } = useAuth();
+  const mostrarSinoAvaliacoes = pode("trocas.visualizar") && (
+    usuario?.gestao || usuario?.perfis.some(p =>
+      ["comprador", "diretor"].includes(p.nome.trim().toLowerCase()),
+    )
+  );
+  const {empresa}=useEmpresa();
+  const nomeEmpresa = empresa?.nome_fantasia?.trim() || "Sua revenda";
   const [alterandoSenha, setAlterandoSenha] = useState(false);
   const [erroSessao, setErroSessao] = useState("");
   const [saindo, setSaindo] = useState(false);
@@ -32,6 +42,9 @@ export function Layout({ children }: LayoutProps) {
 
   const [menuConfiguracoesAberto, setMenuConfiguracoesAberto] = useState(false);
 
+  const [menuComprasAberto,setMenuComprasAberto] = useState(false);
+
+  const [menuFinanceiroAberto,setMenuFinanceiroAberto] = useState(false);
   const paginaAtual = window.location.hash;
 
   const paginaDashboard =
@@ -63,12 +76,14 @@ export function Layout({ children }: LayoutProps) {
     paginaNotasFiscais ||
     paginaConsignacoes;
 
-  const paginaModuloVendas = paginaVendas || paginaAtual === "#orcamentos" || paginaAtual === "#autorizacoes-comerciais";
+  const paginaModuloVendas = paginaAtual === "#historico-clientes" || paginaVendas || paginaAtual === "#orcamentos" || paginaAtual === "#autorizacoes-comerciais";
 
   const paginaCadastros =
     paginaUsuarios || paginaFornecedores || paginaClientes;
 
   function fecharMenus() {
+    setMenuFinanceiroAberto(false);
+    setMenuComprasAberto(false);
     setMenuVeiculosAberto(false);
     setMenuVendasAberto(false);
     setMenuCadastrosAberto(false);
@@ -117,6 +132,8 @@ export function Layout({ children }: LayoutProps) {
   }
 
   function alternarMenuVeiculos() {
+    setMenuFinanceiroAberto(false);
+    setMenuComprasAberto(false);
     setMenuVeiculosAberto(
       (aberto) => !aberto,
     );
@@ -127,6 +144,8 @@ export function Layout({ children }: LayoutProps) {
   }
 
   function alternarMenuVendas() {
+    setMenuFinanceiroAberto(false);
+    setMenuComprasAberto(false);
     setMenuVendasAberto(
       (aberto) => !aberto,
     );
@@ -137,6 +156,8 @@ export function Layout({ children }: LayoutProps) {
   }
 
   function alternarMenuCadastros() {
+    setMenuFinanceiroAberto(false);
+    setMenuComprasAberto(false);
     setMenuCadastrosAberto(
       (aberto) => !aberto,
     );
@@ -157,7 +178,7 @@ export function Layout({ children }: LayoutProps) {
           <span className="brand-divider" />
 
           <span className="company">
-            Autocar Veículos
+            {nomeEmpresa}
           </span>
         </div>
 
@@ -165,7 +186,7 @@ export function Layout({ children }: LayoutProps) {
           className="main-nav"
           aria-label="Navegação principal"
         >
-          <Permissao codigo="perfis.administrar"><button
+          <Permissao codigo="gerenciais.visualizar"><button
             type="button"
             className={
               paginaDashboard
@@ -182,11 +203,9 @@ export function Layout({ children }: LayoutProps) {
             Dashboard
           </button></Permissao>
 
-          <Permissao codigo="perfis.administrar"><button type="button">
-            Gestão⌄
-          </button></Permissao>
+          <Permissao codigo="gerenciais.visualizar"><button type="button" className={paginaAtual==="#relatorios"?"active":undefined} onClick={()=>{fecharMenus();window.location.hash="#relatorios";}}>Relatórios</button></Permissao>
 
-          {(pode("veiculos.visualizar") || pode("notas.visualizar") || pode("consignacoes.visualizar")) && (<div className="nav-dropdown">
+          {(pode("veiculos.visualizar") || pode("notas.visualizar") || pode("notas.saida.visualizar") || pode("consignacoes.visualizar")) && (<div className="nav-dropdown">
             <button
               type="button"
               className={
@@ -223,7 +242,7 @@ export function Layout({ children }: LayoutProps) {
                   Pátio de veículos
                 </button></Permissao>
 
-                <Permissao codigo="notas.visualizar"><button
+                {(pode("notas.visualizar") || pode("notas.saida.visualizar")) && <button
                   type="button"
                   className={
                     paginaNotasFiscais
@@ -234,8 +253,8 @@ export function Layout({ children }: LayoutProps) {
                     abrirNotasFiscais
                   }
                 >
-                  Notas fiscais de entrada
-                </button></Permissao>
+                  Notas fiscais
+                </button>}
 
                 <Permissao codigo="consignacoes.visualizar"><button
                   type="button"
@@ -254,11 +273,9 @@ export function Layout({ children }: LayoutProps) {
             )}
           </div>) }
 
-          <Permissao codigo="trocas.visualizar"><button type="button" className={paginaAtual === "#avaliacoes-troca" ? "active" : undefined} onClick={()=>{fecharMenus();window.location.hash="#avaliacoes-troca";}} title="Avaliações de veículos oferecidos na troca">Compras</button></Permissao>
+          <Permissao codigo="trocas.visualizar"><div className="nav-dropdown"><button type="button" className={['#avaliacoes-troca','#trocas-recebidas'].includes(paginaAtual)?'active':undefined} aria-expanded={menuComprasAberto} onClick={()=>{const abrir=!menuComprasAberto;fecharMenus();setMenuComprasAberto(abrir);}}>Compras⌄</button>{menuComprasAberto&&<div className="nav-dropdown-menu"><button type="button" className={paginaAtual==='#avaliacoes-troca'?'selected':undefined} onClick={()=>{fecharMenus();window.location.hash='#avaliacoes-troca';}}>Avaliações de troca</button><button type="button" className={paginaAtual==='#trocas-recebidas'?'selected':undefined} onClick={()=>{fecharMenus();window.location.hash='#trocas-recebidas';}}>Trocas recebidas</button></div>}</div></Permissao>
 
-          <Permissao codigo="despesas.visualizar"><button type="button">
-            Financeiro⌄
-          </button></Permissao>
+          {pode("pedidos.visualizar") && <div className="nav-dropdown"><button type="button" className={["#pedidos","#financiamentos","#garantias"].includes(paginaAtual)?"active":undefined} aria-expanded={menuFinanceiroAberto} onClick={()=>{const abrir=!menuFinanceiroAberto;fecharMenus();setMenuFinanceiroAberto(abrir);}}>Financeiro⌄</button>{menuFinanceiroAberto&&<div className="nav-dropdown-menu">{[{hash:"#pedidos",nome:"Pedidos de venda"},{hash:"#financiamentos",nome:"Financiamentos"},{hash:"#garantias",nome:"Garantia e pós-venda"}].map(item=><button key={item.hash} type="button" className={paginaAtual===item.hash?"selected":undefined} onClick={()=>{fecharMenus();window.location.hash=item.hash;}}>{item.nome}</button>)}</div>}</div>}
 
           {(pode("vendas.visualizar") || podeConsultarOrcamentos(usuario) || pode("autorizacoes.decidir")) && (<div className="nav-dropdown">
             <button
@@ -297,6 +314,7 @@ export function Layout({ children }: LayoutProps) {
                   Veículos para comercialização
                 </button></Permissao>
                 {podeConsultarOrcamentos(usuario) && <button type="button" className={paginaAtual === "#orcamentos" ? "selected" : undefined} onClick={()=>{fecharMenus();window.location.hash="#orcamentos";}}>Orçamentos e negociações</button>}
+                {podeConsultarHistoricoCliente(usuario) && <button type="button" className={paginaAtual === "#historico-clientes" ? "selected" : undefined} onClick={()=>{fecharMenus();window.location.hash="#historico-clientes";}}>Histórico de clientes</button>}
                 {pode("autorizacoes.decidir") && <button type="button" className={paginaAtual === "#autorizacoes-comerciais" ? "selected" : undefined} onClick={()=>{fecharMenus();window.location.hash="#autorizacoes-comerciais";}}>Autorizações comerciais</button>}
               </div>
             )}
@@ -362,29 +380,24 @@ export function Layout({ children }: LayoutProps) {
             )}
           </div>) }
 
-          <Permissao codigo="perfis.administrar"><div className="nav-dropdown">
-            <button type="button" className={paginaAtual === "#parametros-comerciais" ? "active" : undefined}
+          {(pode("perfis.administrar")||pode("empresa.gerenciar"))&&<div className="nav-dropdown">
+            <button type="button" className={["#parametros-comerciais","#empresa"].includes(paginaAtual) ? "active" : undefined}
               aria-expanded={menuConfiguracoesAberto}
               onClick={() => { const abrir = !menuConfiguracoesAberto; fecharMenus(); setMenuConfiguracoesAberto(abrir); }}>
               Configurações⌄
             </button>
             {menuConfiguracoesAberto && <div className="nav-dropdown-menu">
-              <button type="button" className={paginaAtual === "#parametros-comerciais" ? "selected" : undefined}
-                onClick={() => { fecharMenus(); window.location.hash = "#parametros-comerciais"; }}>Parâmetros comerciais</button>
+              <Permissao codigo="empresa.gerenciar"><button type="button" className={paginaAtual === "#empresa"?"selected":undefined} onClick={()=>{fecharMenus();window.location.hash="#empresa";}}>Dados da empresa</button></Permissao>
+              <Permissao codigo="perfis.administrar"><button type="button" className={paginaAtual === "#parametros-comerciais" ? "selected" : undefined}
+                onClick={() => { fecharMenus(); window.location.hash = "#parametros-comerciais"; }}>Parâmetros comerciais</button></Permissao>
             </div>}
-          </div></Permissao>
+          </div>}
         </nav>
 
         <div className="user-area">
+          {(mostrarSinoAvaliacoes || pode("autorizacoes.decidir") || (pode("pedidos.visualizar") && pode("repasses.gerenciar"))) && <SinoAvaliacoes mostrarAvaliacoes={!!mostrarSinoAvaliacoes} mostrarAutorizacoes={pode("autorizacoes.decidir")} />}
           <button className="session-action" type="button" onClick={() => setAlterandoSenha(true)}>Alterar senha</button>
           <button className="session-action" type="button" onClick={() => void sair()} disabled={saindo}>{saindo ? "Saindo..." : "Sair"}</button>
-          <span
-            className="notification"
-            aria-label="2 notificações"
-          >
-            2
-          </span>
-
           <span className="avatar">
             {usuario?.nome.split(" ").filter(Boolean).slice(0, 2).map(n => n[0]).join("")}
           </span>
@@ -408,8 +421,7 @@ export function Layout({ children }: LayoutProps) {
 
       {alterandoSenha && <AlterarSenhaModal aoFechar={() => setAlterandoSenha(false)} />}
       <footer className="app-footer">
-        AutoFlux · Autocar Veículos ·
-        Novo Hamburgo/RS
+        AutoFlux · {nomeEmpresa}{empresa?.cidade?` · ${empresa.cidade}/${empresa.estado}`:""}
       </footer>
     </div>
   );

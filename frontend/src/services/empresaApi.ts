@@ -1,0 +1,5 @@
+import {apiFetch} from './authApi';
+export interface Empresa {razao_social:string;nome_fantasia:string;cnpj:string;telefone:string;email:string;cep:string;logradouro:string;numero:string;complemento:string;bairro:string;cidade:string;estado:string;versao:number;cadastrada:boolean;data_atualizacao:string}
+export interface IdentificacaoEmpresa {nome:string;razao_social:string;cnpj:string;telefone:string;email:string;endereco:string}
+const URL=import.meta.env.VITE_API_EMPRESA_URL??(import.meta.env.VITE_API_PEDIDOS_URL?String(import.meta.env.VITE_API_PEDIDOS_URL).replace(/pedidos-venda\.php(?:\?.*)?$/,'empresa.php'):'http://localhost/autocar/api/routes/empresa.php');
+export async function acessarEmpresa(dados?:Empresa):Promise<Empresa>{const r=await apiFetch(URL,{method:dados?'PUT':'GET',headers:{Accept:'application/json','Content-Type':'application/json'},body:dados?JSON.stringify(dados):undefined});let j;try{j=await r.json();}catch{throw new Error('O cadastro da empresa retornou uma resposta inválida.');}if(!r.ok||!j.sucesso)throw new Error(j.mensagem??'Não foi possível acessar a empresa.');return j.dados;}

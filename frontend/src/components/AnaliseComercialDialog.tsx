@@ -8,6 +8,7 @@ export function AnaliseComercialDialog({children,bloqueado,onFechar}:{children:R
   const anterior=document.activeElement as HTMLElement|null;
   const overflow=document.body.style.overflow;document.body.style.overflow='hidden';ref.current?.focus();
   const teclado=(e:KeyboardEvent)=>{
+   if(document.querySelector('dialog[open]'))return;
    if(e.key==='Escape'){if(!bloqueado)fechar.current();return;}
    if(e.key!=='Tab')return;
    const campos=Array.from(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),summary,[tabindex="0"]')??[]);

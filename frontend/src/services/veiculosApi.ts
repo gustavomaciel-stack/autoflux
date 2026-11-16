@@ -32,12 +32,12 @@ async function processarResposta<T>(
   return resultado.dados;
 }
 
-export async function listarVeiculos(): Promise<
-  Veiculo[]
-> {
-  const resposta = await apiFetch(ENDPOINT);
-
-  return processarResposta<Veiculo[]>(resposta);
+export async function listarVeiculos(pagina = 1, busca = ""): Promise<{
+  itens: Veiculo[]; total: number; pagina: number; paginas: number;
+}> {
+  const parametros = new URLSearchParams({ pagina: String(pagina), busca });
+  const resposta = await apiFetch(`${ENDPOINT}?${parametros}`);
+  return processarResposta(resposta);
 }
 
 export async function buscarVeiculo(

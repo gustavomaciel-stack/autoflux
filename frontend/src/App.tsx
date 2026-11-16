@@ -1,9 +1,17 @@
+import { EmpresaPage } from "./pages/EmpresaPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { RelatoriosPage } from "./pages/RelatoriosPage";
+import { FinanciamentosPage } from './pages/FinanciamentosPage';
+import { TrocasRecebidasPage } from './pages/TrocasRecebidasPage';
+import { GarantiasPage } from './pages/GarantiasPage';
+import { PedidosPage } from './pages/PedidosPage';
 import { AvaliacoesTrocaPage } from './pages/AvaliacoesTrocaPage';
 import { AutorizacoesComerciaisPage } from "./pages/AutorizacoesComerciaisPage";
 import { OrcamentosPage } from "./pages/OrcamentosPage";
 import { ParametrosComerciaisPage } from "./pages/ParametrosComerciaisPage";
+import { HistoricoClientesPage } from "./pages/HistoricoClientesPage";
 import { ClientesPage } from "./pages/ClientesPage";
-import { podeGerenciarClientes, podeConsultarOrcamentos } from "./services/clientesAcesso";
+import { podeGerenciarClientes, podeConsultarOrcamentos, podeConsultarHistoricoCliente } from "./services/clientesAcesso";
 import { PerfisPage } from "./pages/PerfisPage";
 import { useAuth } from "./context/AuthContext";
 import { useEffect, useState, type FormEvent } from "react";
@@ -18,6 +26,8 @@ import { VendasPage } from "./pages/VendasPage";
 type Pagina =
   | "login"
   | "dashboard"
+  | "relatorios"
+  | "empresa"
   | "veiculos"
   | "notas-fiscais-entrada"
   | "consignacoes"
@@ -25,9 +35,14 @@ type Pagina =
   | "fornecedores"
   | "usuarios"
   | "perfis"
+  | "historico-clientes"
   | "clientes"
   | "parametros-comerciais"
+  | "trocas-recebidas"
   | "avaliacoes-troca"
+  | "financiamentos"
+  | "garantias"
+  | "pedidos"
   | "orcamentos"
   | "autorizacoes-comerciais";
 
@@ -41,6 +56,10 @@ function obterPaginaAtual(): Pagina {
       return "login";
     case "dashboard":
       return "dashboard";
+    case "relatorios":
+      return "relatorios";
+    case "empresa":
+      return "empresa";
 
     case "notas-fiscais-entrada":
       return "notas-fiscais-entrada";
@@ -58,12 +77,22 @@ function obterPaginaAtual(): Pagina {
       return "perfis";
     case "autorizacoes-comerciais":
       return "autorizacoes-comerciais";
+    case "trocas-recebidas":
+      return "trocas-recebidas";
     case "avaliacoes-troca":
       return "avaliacoes-troca";
+    case "financiamentos":
+      return "financiamentos";
+    case "garantias":
+      return "garantias";
+    case "pedidos":
+      return "pedidos";
     case "orcamentos":
       return "orcamentos";
     case "parametros-comerciais":
       return "parametros-comerciais";
+    case "historico-clientes":
+      return "historico-clientes";
     case "clientes":
       return "clientes";
     case "usuarios":
@@ -113,54 +142,6 @@ function LoginPage() {
   );
 }
 
-function PaginaEmConstrucao({
-  titulo,
-  descricao,
-}: {
-  titulo: string;
-  descricao: string;
-}) {
-  return (
-    <Layout>
-      <div>
-        <div className="breadcrumb">
-          <strong>{titulo}</strong>
-        </div>
-
-        <div
-          style={{
-            marginTop: "24px",
-            padding: "32px",
-            border: "1px solid #d9e1ec",
-            borderRadius: "14px",
-            background: "#ffffff",
-          }}
-        >
-          <h1
-            style={{
-              margin: "0 0 12px",
-              color: "#172033",
-              fontSize: "28px",
-            }}
-          >
-            {titulo}
-          </h1>
-
-          <p
-            style={{
-              margin: 0,
-              color: "#667085",
-              fontSize: "16px",
-            }}
-          >
-            {descricao}
-          </p>
-        </div>
-      </div>
-    </Layout>
-  );
-}
-
 export default function App() {
   const { usuario, carregando, pode } = useAuth();
   const [paginaAtual, setPaginaAtual] =
@@ -191,19 +172,18 @@ export default function App() {
   if (carregando) return <main className="login-page">Carregando...</main>;
   if (!usuario) return <LoginPage />;
 
-  const acesso: Record<string, string> = { "avaliacoes-troca":"trocas.visualizar", "autorizacoes-comerciais":"autorizacoes.decidir", veiculos:"veiculos.visualizar", login:"veiculos.visualizar", vendas:"vendas.visualizar", consignacoes:"consignacoes.visualizar", "notas-fiscais-entrada":"notas.visualizar", fornecedores:"fornecedores.visualizar", usuarios:"usuarios.administrar", perfis:"perfis.administrar", dashboard:"perfis.administrar", "parametros-comerciais":"perfis.administrar" };
-  const acessoPermitido = paginaAtual === "clientes" ? podeGerenciarClientes(usuario) : paginaAtual === "orcamentos" ? podeConsultarOrcamentos(usuario) : pode(acesso[paginaAtual]);
+  const acesso: Record<string, string> = { financiamentos:"pedidos.visualizar", "trocas-recebidas":"trocas.visualizar", garantias:"pedidos.visualizar", pedidos:"pedidos.visualizar", "avaliacoes-troca":"trocas.visualizar", "autorizacoes-comerciais":"autorizacoes.decidir", veiculos:"veiculos.visualizar", login:"veiculos.visualizar", vendas:"vendas.visualizar", consignacoes:"consignacoes.visualizar", "notas-fiscais-entrada":"notas.visualizar", fornecedores:"fornecedores.visualizar", usuarios:"usuarios.administrar", perfis:"perfis.administrar", dashboard:"gerenciais.visualizar", relatorios:"gerenciais.visualizar", empresa:"empresa.gerenciar", "parametros-comerciais":"perfis.administrar" };
+  const acessoPermitido = paginaAtual === "historico-clientes" ? podeConsultarHistoricoCliente(usuario) : paginaAtual === "clientes" ? podeGerenciarClientes(usuario) : paginaAtual === "orcamentos" ? podeConsultarOrcamentos(usuario) : paginaAtual === "notas-fiscais-entrada" ? pode("notas.visualizar") || pode("notas.saida.visualizar") : pode(acesso[paginaAtual]);
   if (!acessoPermitido) return <Layout><div className="alert error">Seu perfil não permite acessar esta página. Use os menus disponíveis.</div></Layout>;
   switch (paginaAtual) {
     case "login":
       return <VeiculosPage />;
     case "dashboard":
-      return (
-        <PaginaEmConstrucao
-          titulo="Dashboard"
-          descricao="O dashboard completo será desenvolvido em uma entrega posterior."
-        />
-      );
+      return <DashboardPage />;
+    case "relatorios":
+      return <RelatoriosPage />;
+    case "empresa":
+      return <EmpresaPage />;
 
     case "notas-fiscais-entrada":
       return <NotasFiscaisEntradaPage />;
@@ -225,12 +205,22 @@ export default function App() {
       return <PerfisPage />;
     case "autorizacoes-comerciais":
       return <AutorizacoesComerciaisPage />;
+    case "trocas-recebidas":
+      return <TrocasRecebidasPage />;
     case "avaliacoes-troca":
       return <AvaliacoesTrocaPage />;
+    case "financiamentos":
+      return <FinanciamentosPage />;
+    case "garantias":
+      return <GarantiasPage />;
+    case "pedidos":
+      return <PedidosPage />;
     case "orcamentos":
       return <OrcamentosPage />;
     case "parametros-comerciais":
       return <ParametrosComerciaisPage />;
+    case "historico-clientes":
+      return <HistoricoClientesPage />;
     case "clientes":
       return <ClientesPage />;
     case "usuarios":

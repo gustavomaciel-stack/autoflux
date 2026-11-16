@@ -126,6 +126,7 @@ export function HistoricoCiclosModal({
     useState(false);
 
   const [erro, setErro] = useState("");
+  const [cicloSelecionado, setCicloSelecionado] = useState<number | null>(null);
 
   useEffect(() => {
     if (!aberto || idVeiculo === null) {
@@ -147,7 +148,9 @@ export function HistoricoCiclosModal({
           );
 
         if (!requisicaoCancelada) {
+          dados.ciclos.sort((a, b) => Number(b.id_ciclo) - Number(a.id_ciclo));
           setHistorico(dados);
+          setCicloSelecionado((dados.ciclos.find(cicloEstaAtivo) ?? dados.ciclos[0])?.id_ciclo ?? null);
         }
       } catch (error) {
         if (!requisicaoCancelada) {
@@ -256,6 +259,35 @@ export function HistoricoCiclosModal({
 
               <section className="vehicle-history-list">
                 <h3>Ciclos na revenda</h3>
+                <div className="vehicle-history-tabs" role="tablist" aria-label="Ciclos do veículo">
+                  {historico.ciclos.map((ciclo, indice) => (
+                    <button
+                      key={ciclo.id_ciclo}
+                      id={`aba-ciclo-${ciclo.id_ciclo}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={cicloSelecionado === ciclo.id_ciclo}
+                      aria-controls={`painel-ciclo-${ciclo.id_ciclo}`}
+                      tabIndex={cicloSelecionado === ciclo.id_ciclo ? 0 : -1}
+                      onClick={() => setCicloSelecionado(ciclo.id_ciclo)}
+                      onKeyDown={(evento) => {
+                        let destino = indice;
+                        if (evento.key === "ArrowRight") destino = (indice + 1) % historico.ciclos.length;
+                        else if (evento.key === "ArrowLeft") destino = (indice - 1 + historico.ciclos.length) % historico.ciclos.length;
+                        else if (evento.key === "Home") destino = 0;
+                        else if (evento.key === "End") destino = historico.ciclos.length - 1;
+                        else return;
+                        evento.preventDefault();
+                        const id = historico.ciclos[destino].id_ciclo;
+                        setCicloSelecionado(id);
+                        document.getElementById(`aba-ciclo-${id}`)?.focus();
+                      }}
+                    >
+                      <strong>{cicloEstaAtivo(ciclo) ? "Ciclo atual" : `Ciclo ${historico.ciclos.length - indice}`}</strong>
+                      <small>{ciclo.nosso_numero}</small>
+                    </button>
+                  ))}
+                </div>
 
                 {historico.ciclos.length === 0 ? (
                   <div className="vehicle-history-message">
@@ -264,12 +296,16 @@ export function HistoricoCiclosModal({
                 ) : (
                   historico.ciclos.map(
                     (ciclo, indice) => {
+                      if (ciclo.id_ciclo !== cicloSelecionado) return null;
                       const ativo =
                         cicloEstaAtivo(ciclo);
 
                       return (
                         <article
                           className="vehicle-history-cycle"
+                          role="tabpanel"
+                          id={`painel-ciclo-${ciclo.id_ciclo}`}
+                          aria-labelledby={`aba-ciclo-${ciclo.id_ciclo}`}
                           key={ciclo.id_ciclo}
                         >
                           <div className="vehicle-history-cycle-heading">
@@ -421,6 +457,35 @@ export function HistoricoCiclosModal({
                               </strong>
                             </div>
                           </div>
+
+                          {pode("pedidos.visualizar") && (
+                            <section className="vehicle-history-sales" aria-label={`Vendas do ciclo ${ciclo.nosso_numero}`}>
+                              <h4>Venda do veículo</h4>
+                              {ciclo.vendas === undefined ? (
+                                <p>Informações da venda indisponíveis. Atualize a consulta.</p>
+                              ) : ciclo.vendas.length === 0 ? (
+                                <p>Não vendido</p>
+                              ) : ciclo.vendas.map((venda) => (
+                                <div className="vehicle-history-sale" key={venda.id_venda}>
+                                  <div>
+                                    <span>Valor final da venda</span>
+                                    <strong>{formatarMoeda(venda.valor_final)}</strong>
+                                  </div>
+                                  <div>
+                                    <span>Data da venda</span>
+                                    <strong>{formatarDataHora(venda.data_venda)}</strong>
+                                  </div>
+                                  <div>
+                                    <span>Pedido de venda</span>
+                                    <strong>{venda.numero_pedido}</strong>
+                                  </div>
+                                  <span className={`vehicle-history-status ${venda.situacao_pedido === "Cancelado" ? "cancelled" : "active"}`}>
+                                    {venda.situacao_pedido === "Cancelado" ? "Venda cancelada" : "Venda concluída"}
+                                  </span>
+                                </div>
+                              ))}
+                            </section>
+                          )}
 
                           {ciclo.situacao_consignacao ===
                             "Devolvida" && (

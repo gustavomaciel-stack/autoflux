@@ -1,0 +1,54 @@
+import { OrientacaoFluxo } from './OrientacaoFluxo';
+import { useState, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import { concluirPedido, type Pedido } from '../services/pedidosApi';
+import { moedaPedido } from './PedidoResumo';
+import './ConclusaoPedido.css';
+
+type Aba = 'resumo' | 'pagamento' | 'trocas' | 'repasse' | 'confirmar';
+export function ConclusaoPedido({pedido,ocupado,onOcupado,onErro,onVoltar,onSalvo}:{pedido:Pedido;ocupado:boolean;onOcupado:(v:boolean)=>void;onErro:(s:string)=>void;onVoltar:()=>void;onSalvo:(p:Pedido)=>void}) {
+ const [aba,setAba]=useState<Aba>('resumo');
+ const [conferido,setConferido]=useState(false),[observacoes,setObservacoes]=useState('');
+ const painel=useRef<HTMLDivElement>(null);
+ const d=pedido.dados, r=pedido.previa_repasse;
+ const percentual=Number(d.composicao?.comissao_percentual);
+ const regra=d.composicao?.comissao_percentual;
+ const valido=regra!==undefined&&regra!==null&&regra!==''&&Number.isFinite(percentual)&&percentual>=0&&percentual<=100;
+ const comissao=Math.round(Math.round(Number(pedido.valor_negociado)*100)*Math.round(percentual*100)/10000)/100;
+ const origem=d.origem.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+ const consignado=origem==='consignacao', proprio=origem==='aquisicao';
+ const repasseValido=!!r?.assinatura&&!r.erro;
+ const permitido=(proprio||(consignado&&repasseValido))&&valido&&Number(pedido.saldo_restante)>=0&&!!pedido.pagamento_informado;
+ const abas:{id:Aba;nome:string;contador?:number}[]=[{id:'resumo',nome:'Resumo'},{id:'pagamento',nome:'Pagamento'},{id:'trocas',nome:'Trocas',contador:d.trocas.length},...(consignado?[{id:'repasse' as Aba,nome:'Repasse'}]:[]),{id:'confirmar',nome:'Confirmar'}];
+ const indice=abas.findIndex(t=>t.id===aba), prefixo='fechar-'+pedido.id_pedido;
+ const pendencias=[...(!proprio&&!consignado?['Origem do veículo inválida.']:[]),...(!valido?['Comissão indisponível. Revise a negociação.']:[]),...(!pedido.pagamento_informado?['Informe as formas de pagamento no pedido.']:[]),...(Number(pedido.saldo_restante)<0?['Revise o crédito do cliente antes de concluir.']:[]),...(consignado&&!repasseValido?[r?.erro||'Atualize o pedido para carregar o repasse.']:[])];
+ function trocar(id:Aba,focar=false){setAba(id);if(focar)requestAnimationFrame(()=>painel.current?.focus());}
+ function teclado(e:KeyboardEvent<HTMLButtonElement>,i:number){
+  let n=i;if(e.key==='ArrowRight')n=(i+1)%abas.length;else if(e.key==='ArrowLeft')n=(i+abas.length-1)%abas.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=abas.length-1;else return;
+  e.preventDefault();setAba(abas[n].id);document.getElementById(prefixo+'-tab-'+abas[n].id)?.focus();
+ }
+ async function confirmar(e:FormEvent){
+  e.preventDefault();if(aba!=='confirmar'||ocupado||!conferido||!permitido)return;
+  onOcupado(true);onErro('');try{onSalvo(await concluirPedido(Number(pedido.id_pedido),Number(pedido.versao),observacoes,r?.assinatura));}catch(e){onErro(e instanceof Error?e.message:'Não foi possível concluir a venda.');}finally{onOcupado(false);}
+ }
+ return <form className="fechar-venda" onSubmit={confirmar}>
+  <header className="fechar-heading"><div><span className="pedido-eyebrow">Fechamento da venda</span><h2>Conferir e concluir</h2><p>{d.marca} {d.modelo} <span>·</span> {d.placa} <span>·</span> {d.nosso_numero}</p></div><span className="pedido-origin">{consignado?'Consignado':'Próprio'}</span></header>
+  <div className={'fechar-metricas'+(consignado?' com-repasse':'')}>
+   <div><span>Valor da venda</span><strong>{moedaPedido(pedido.valor_negociado)}</strong></div>
+   <div><span>Sinal + trocas</span><strong>{moedaPedido(Number(pedido.valor_sinal)+Number(pedido.valor_trocas))}</strong></div>
+   <div className="fechar-destaque"><span>Saldo do cliente</span><strong>{moedaPedido(pedido.saldo_restante)}</strong></div>
+   {consignado&&<div className="fechar-repasse-metrica"><span>Repasse ao proprietário</span><strong>{repasseValido&&r?moedaPedido(r.repasse_liquido):'A conferir'}</strong></div>}
+  </div>
+  {pendencias.length>0&&<div className="fechar-pendencias" role="alert"><strong>Antes de concluir</strong>{pendencias.map(t=><p key={t}>{t}</p>)}</div>}
+  <div className="pedido-tab-shell">
+   <div className="pedido-tabs" role="tablist" aria-label="Conferência da venda">{abas.map((t,i)=><button type="button" role="tab" key={t.id} id={prefixo+'-tab-'+t.id} aria-controls={prefixo+'-panel-'+t.id} aria-selected={aba===t.id} tabIndex={aba===t.id?0:-1} disabled={ocupado} onClick={()=>trocar(t.id)} onKeyDown={e=>teclado(e,i)}>{t.nome}{t.contador!==undefined&&<span className="pedido-tab-count">{t.contador}</span>}</button>)}</div>
+   <div ref={painel} className="fechar-painel" role="tabpanel" tabIndex={-1} id={prefixo+'-panel-'+aba} aria-labelledby={prefixo+'-tab-'+aba}>
+    {aba==='resumo'&&<><div className="fechar-titulo"><h3>Dados da negociação <OrientacaoFluxo>Confira o pagamento{d.trocas.length?', os veículos de troca':''}{consignado?' e o repasse ao proprietário':''}. A última aba permite confirmar a venda.</OrientacaoFluxo></h3><span>{d.numero_orcamento}</span></div><dl className="fechar-dados"><div><dt>Cliente</dt><dd>{d.cliente}</dd></div><div><dt>Responsável pela venda</dt><dd>{d.vendedor}</dd></div><div><dt>Veículo</dt><dd>{d.marca} {d.modelo} · {d.placa}</dd></div><div><dt>Ciclo do veículo</dt><dd>{d.nosso_numero}</dd></div></dl></>}
+    {aba==='pagamento'&&<><div className="fechar-duas-colunas"><section><h3>Como o cliente paga o saldo</h3><div className="fechar-lista">{pedido.pagamentos?.map((pg,i)=><div key={i}><span><strong>{pg.forma}</strong>{pg.banco&&<small>{pg.banco} · {pg.parcelas} parcelas</small>}{pg.primeiro_vencimento&&<small>Primeira parcela: {pg.primeiro_vencimento.slice(0,10).split('-').reverse().join('/')}{pg.ultimo_vencimento?' · Última prevista: '+pg.ultimo_vencimento.slice(0,10).split('-').reverse().join('/'):''}</small>}</span><b>{moedaPedido(pg.valor)}</b></div>)}{Number(pedido.saldo_restante)===0&&<p>O sinal e as trocas cobrem o valor da venda.</p>}</div><p className="fechar-nota">As formas de pagamento representam o acordo com o cliente.</p></section><section className="fechar-conta"><h3>Composição do pagamento</h3><dl><div><dt>Valor da venda</dt><dd>{moedaPedido(pedido.valor_negociado)}</dd></div><div><dt>Sinal</dt><dd>− {moedaPedido(pedido.valor_sinal)}</dd></div><div><dt>Trocas ({d.trocas.length})</dt><dd>− {moedaPedido(pedido.valor_trocas)}</dd></div><div className="fechar-total"><dt>Saldo do cliente</dt><dd>{moedaPedido(pedido.saldo_restante)}</dd></div></dl></section></div><div className="fechar-comissao"><span><strong>Comissão do vendedor</strong><small>{d.vendedor} · {valido?percentual.toLocaleString('pt-BR')+'%':'Regra indisponível'}</small></span><strong>{valido?moedaPedido(comissao):'—'}</strong></div><p className="fechar-nota">A comissão segue a regra do orçamento e será preservada nesta venda.</p></>}
+    {aba==='trocas'&&<><div className="fechar-titulo"><h3>Veículos recebidos como pagamento <OrientacaoFluxo>Após concluir, as trocas ficam recebidas. A entrada no estoque será feita pelo Compras, com nota fiscal.</OrientacaoFluxo></h3><strong>{moedaPedido(pedido.valor_trocas)}</strong></div>{d.trocas.length?<><div className="fechar-lista">{d.trocas.map(t=><div key={t.id_veiculo_entrada}><span><strong>{t.marca} {t.modelo}</strong><small>{t.placa} · {t.ano}{t.ano_modelo?'/'+t.ano_modelo:''}</small></span><b>{moedaPedido(t.valor_avaliado)}</b></div>)}</div></>:<p className="fechar-nota">Esta venda não possui veículos de troca.</p>}</>}
+    {aba==='repasse'&&<>{repasseValido&&r?<><div className="fechar-titulo"><h3>Valor devido ao proprietário <OrientacaoFluxo>O repasse ficará pendente após a venda. Registre o pagamento ao proprietário separadamente, mesmo quando houver troca.</OrientacaoFluxo></h3><span>{r.proprietario}</span></div><div className="fechar-duas-colunas"><section className="fechar-conta fechar-conta-repasse"><dl><div><dt>Repasse acordado</dt><dd>{moedaPedido(r.repasse_acordado)}</dd></div><div><dt>Despesas descontadas</dt><dd>− {moedaPedido(r.descontos)}</dd></div><div className="fechar-total"><dt>Repasse líquido</dt><dd>{moedaPedido(r.repasse_liquido)}</dd></div></dl></section><section><h3>Despesas descontadas do repasse</h3>{r.itens_desconto.length?<div className="fechar-lista fechar-lista-despesas">{r.itens_desconto.map(i=><div key={i.id_despesa}><span>{i.descricao}</span><b>{moedaPedido(i.valor)}</b></div>)}</div>:<p className="fechar-nota">Nenhuma despesa para descontar.</p>}<details className="fechar-outras"><summary>Outras despesas · não descontadas</summary><p>Da loja: <strong>{moedaPedido(r.despesas_revenda)}</strong></p><p>Do proprietário, sem desconto: <strong>{moedaPedido(r.despesas_proprietario)}</strong></p></details></section></div></>:<div className="alert error">{r?.erro||'Atualize o pedido para conferir o repasse.'}</div>}</>}
+    {aba==='confirmar'&&<><div className="fechar-titulo"><h3>Confirmar o fechamento</h3><span>Data e hora registradas na confirmação</span></div><div className="fechar-efeitos"><p><strong>Veículo vendido</strong><span>O pedido será concluído e o ciclo encerrado.</span></p>{d.trocas.length>0&&<p><strong>{d.trocas.length} veículo(s) de troca</strong><span>Recebidos, aguardando aquisição com nota fiscal.</span></p>}{consignado&&<p><strong>Repasse: {repasseValido&&r?moedaPedido(r.repasse_liquido):'a conferir'}</strong><span>{r?.proprietario} · {repasseValido&&r&&Number(r.repasse_liquido)===0?'Sem saldo a repassar.':'Pagamento ao proprietário ficará pendente.'}</span></p>}</div><label className="field fechar-observacoes">Observações <span>(opcional)</span><textarea rows={2} maxLength={5000} value={observacoes} disabled={ocupado} onChange={e=>setObservacoes(e.target.value)} placeholder="Registre alguma informação importante sobre o fechamento."/></label><label className="pedido-check fechar-check"><input type="checkbox" checked={conferido} disabled={ocupado||!permitido} onChange={e=>setConferido(e.target.checked)}/>Conferi os dados e confirmo a conclusão desta venda.</label></>}
+   </div>
+   <footer className="fechar-rodape"><button data-ui-nav="back" type="button" className="button secondary" disabled={ocupado} onClick={onVoltar}>Voltar ao pedido</button><div><span className="fechar-etapa">{indice+1} de {abas.length}</span>{indice>0&&<button data-ui-nav="back" type="button" className="button secondary" disabled={ocupado} onClick={()=>trocar(abas[indice-1].id,true)}>Anterior</button>}{aba==='confirmar'?<button data-ui-tone="approve" type="submit" className="button primary" disabled={ocupado||!conferido||!permitido}>{ocupado?'Concluindo...':'Confirmar conclusão da venda'}</button>:<button data-ui-nav="next" type="button" className="button primary" disabled={ocupado} onClick={()=>trocar(abas[indice+1].id,true)}>Próximo</button>}</div></footer>
+  </div>
+ </form>;
+}

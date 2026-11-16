@@ -80,6 +80,14 @@ try {
     );
 
     if ($metodo === "GET") {
+        if (isset($_GET['historico'])) {
+            Auth::exigir('orcamentos.visualizar');
+            Auth::exigir('pedidos.visualizar');
+            if (!$idCliente || $idCliente < 1) {
+                throw new InvalidArgumentException('Informe um cliente válido.');
+            }
+            responderJson(['sucesso' => true, 'dados' => $model->historicoComercial($idCliente)]);
+        }
         if (isset($_GET["id"])) {
             if (
                 $idCliente === false ||

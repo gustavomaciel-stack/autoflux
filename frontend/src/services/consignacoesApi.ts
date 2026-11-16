@@ -3,7 +3,6 @@ import type {
   CadastroConsignacao,
   Consignacao,
   ConsignacaoApiResponse,
-  DevolucaoConsignacao,
 } from "../types/Consignacao";
 
 const API_URL =
@@ -34,13 +33,11 @@ async function lerResposta<T>(
   return conteudo;
 }
 
-export async function listarConsignacoes(): Promise<
-  Consignacao[]
-> {
+export async function listarConsignacoes(pagina = 1, busca = "", situacao = "Ativa"): Promise<{itens: Consignacao[]; total: number; pagina: number; paginas: number}> {
   let resposta: Response;
 
   try {
-    resposta = await apiFetch(API_URL, {
+    resposta = await apiFetch(`${API_URL}?${new URLSearchParams({pagina:String(pagina), busca, situacao})}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -52,13 +49,12 @@ export async function listarConsignacoes(): Promise<
     );
   }
 
-  const conteudo = await lerResposta<Consignacao[]>(
+  const conteudo = await lerResposta<{itens: Consignacao[]; total: number; pagina: number; paginas: number}>(
     resposta,
   );
 
-  return Array.isArray(conteudo.dados)
-    ? conteudo.dados
-    : [];
+  if (!conteudo.dados || !Array.isArray(conteudo.dados.itens)) throw new Error("Resposta da consulta inválida.");
+  return conteudo.dados;
 }
 
 export async function buscarConsignacao(
@@ -130,20 +126,19 @@ export async function cadastrarConsignacao(
 
 export async function devolverConsignacao(
   idConsignacao: number,
-  dados: DevolucaoConsignacao,
+  dados: FormData,
 ): Promise<Consignacao> {
   let resposta: Response;
 
   try {
     resposta = await apiFetch(
-      `${API_URL}?id=${idConsignacao}`,
+      `${API_URL}?id=${idConsignacao}&acao=devolver`,
       {
-        method: "PATCH",
+        method: "POST",
         headers: {
           Accept: "application/json",
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify(dados),
+        body: dados,
       },
     );
   } catch {

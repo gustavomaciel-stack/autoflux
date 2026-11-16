@@ -171,3 +171,22 @@ export function alterarSituacaoCliente(id: number, ativo: boolean): Promise<Clie
 export function listarClientesAtivos(): Promise<Cliente[]> {
   return requisitarCadastro<Cliente[]>(`${CADASTRO_URL}?ativos=1`);
 }
+
+export interface OperacaoCliente {
+  id_pedido: number;
+  numero_pedido: string;
+  data_venda: string;
+  valor: string;
+  marca: string;
+  modelo: string;
+  placa: string;
+  trocas: { marca: string; modelo: string; placa: string; valor: string | null }[];
+}
+
+export async function consultarHistoricoCliente(id: number): Promise<OperacaoCliente[]> {
+  const destino = new URL(API_URL, window.location.href);
+  destino.searchParams.set('historico', '1');
+  destino.searchParams.set('id', String(id));
+  const resposta = await apiFetch(destino.toString());
+  return (await lerResposta<OperacaoCliente[]>(resposta)).dados ?? [];
+}

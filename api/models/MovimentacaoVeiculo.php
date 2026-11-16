@@ -139,6 +139,10 @@ final class MovimentacaoVeiculo
                 );
             }
 
+            if ($ciclo['situacao_atual'] === 'Separado para venda') {
+                throw new InvalidArgumentException('O veículo possui pedido em andamento. Cancele o pedido para liberar sua movimentação.');
+            }
+
             if ($situacaoNova === 'Reservado' || (new ReservaOrcamento($this->conexao))->ativa($idCiclo)) {
                 throw new InvalidArgumentException('Gerencie a reserva pelo orçamento antes de movimentar o veículo.');
             }

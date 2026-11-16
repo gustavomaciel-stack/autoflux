@@ -55,11 +55,11 @@ function normalizarVeiculo(veiculo: VeiculoRecebido): VeiculoVenda {
   };
 }
 
-export async function listarVeiculosParaVenda(): Promise<VeiculoVenda[]> {
+export async function listarVeiculosParaVenda(pagina: number, busca: string, situacao: string): Promise<ConsultaComercial> {
   let resposta: Response;
 
   try {
-    resposta = await apiFetch(API_URL, {
+    resposta = await apiFetch(`${API_URL}${API_URL.includes("?") ? "&" : "?"}${new URLSearchParams({pagina: String(pagina), busca, situacao, comercial: "1"})}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -85,13 +85,9 @@ export async function listarVeiculosParaVenda(): Promise<VeiculoVenda[]> {
     );
   }
 
-  if (!Array.isArray(conteudo.dados)) {
-    return [];
-  }
-
-  return conteudo.dados.map((veiculo) =>
-    normalizarVeiculo(veiculo as VeiculoRecebido),
-  );
+  const dados = conteudo.dados as unknown as ConsultaComercial;
+  if (!dados || !Array.isArray(dados.itens)) throw new Error("Resposta da consulta comercial inválida.");
+  return {...dados, itens: dados.itens.map(veiculo => normalizarVeiculo(veiculo as VeiculoRecebido))};
 }
 
 export function veiculoEstaDisponivel(
@@ -107,4 +103,9 @@ export function veiculoEstaDisponivel(
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase() === "disponivel";
+}
+export interface ConsultaComercial {
+  itens: VeiculoVenda[]; total: number; pagina: number; paginas: number;
+  situacoes: string[];
+  contadores: {total: number; disponiveis: number; bloqueados: number};
 }

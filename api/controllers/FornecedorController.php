@@ -199,7 +199,7 @@ final class FornecedorController
 
         if ($tipoPessoa === "PJ" && !Cnpj::valido($cnpj)) {
             $this->responderErro(
-                "CNPJ inválido. Informe 12 letras/números e 2 dígitos verificadores corretos."
+                "Informe um CNPJ com 14 caracteres: 12 letras/números e 2 números finais."
             );
             return null;
         }

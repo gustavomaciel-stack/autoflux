@@ -27,6 +27,9 @@ final class ParametroComercial
     {
         $validado = ImpostosEstimados::validar($impostos);
         $imposto = $validado['total'];
+        if ((int) round((float) $padrao * 100) + (int) round((float) $imposto * 100) >= 10000) {
+            throw new InvalidArgumentException('Margem-alvo e impostos estimados devem somar menos de 100%.');
+        }
         $config = json_encode($validado['itens'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
         $this->pdo->beginTransaction();
         try {

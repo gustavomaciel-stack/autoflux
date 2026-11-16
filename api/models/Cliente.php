@@ -43,6 +43,38 @@ final class Cliente
         return $consulta->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function historicoComercial(int $idCliente): array
+    {
+        $consulta = $this->conexao->prepare("
+            SELECT p.id_pedido, p.numero_pedido, f.data_venda,
+                   f.valor_final valor, v.marca, v.modelo, v.placa, p.snapshot
+            FROM pedidos_venda_autoflux p
+            JOIN vendas_fechamento_autoflux f ON f.id_pedido = p.id_pedido
+            JOIN ciclos_veiculo c ON c.id_ciclo = p.id_ciclo
+            JOIN veiculos v ON v.id_veiculo = c.id_veiculo
+            WHERE p.id_cliente = ? AND p.situacao = 'Concluído'
+            ORDER BY f.data_venda DESC, p.id_pedido DESC
+        ");
+        $consulta->execute([$idCliente]);
+        $operacoes = $consulta->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($operacoes as &$operacao) {
+            $snapshot = json_decode($operacao['snapshot'] ?? '{}', true, 512, JSON_THROW_ON_ERROR);
+            unset($operacao['snapshot']);
+            foreach (['marca', 'modelo', 'placa'] as $campo) {
+                $operacao[$campo] = $snapshot[$campo] ?? $operacao[$campo];
+            }
+            $operacao['trocas'] = array_map(static fn(array $troca): array => [
+                'marca' => $troca['marca'] ?? '',
+                'modelo' => $troca['modelo'] ?? '',
+                'placa' => $troca['placa'] ?? '',
+                'valor' => $troca['valor_avaliado'] ?? null,
+            ], $snapshot['trocas'] ?? []);
+        }
+        unset($operacao);
+        return $operacoes;
+    }
+
     public function buscarPorId(int $idCliente): ?array
     {
         $sql = "

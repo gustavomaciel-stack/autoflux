@@ -27,7 +27,6 @@ const situacoes: SituacaoVeiculo[] = [
   "Disponível",
   "Em preparação",
   "Em manutenção",
-  "Reservado",
   "Bloqueado",
 ];
 

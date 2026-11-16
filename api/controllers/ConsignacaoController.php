@@ -59,7 +59,7 @@ final class ConsignacaoController
     {
         return [
             'sucesso' => true,
-            'dados' => $this->consignacao->listar(),
+            'dados' => $this->consignacao->listar(max(1, (int) ($_GET['pagina'] ?? 1)), trim((string) ($_GET['busca'] ?? '')), (string) ($_GET['situacao'] ?? 'Ativa')),
         ];
     }
 
@@ -117,10 +117,7 @@ final class ConsignacaoController
             );
         }
 
-        $idUsuarioResponsavel = filter_var(
-            $dadosRecebidos['id_usuario_responsavel'] ?? null,
-            FILTER_VALIDATE_INT
-        );
+        $idUsuarioResponsavel = (int) Auth::usuario()['id_usuario'];
 
         $dataSaida = trim(
             (string) ($dadosRecebidos['data_saida'] ?? '')
@@ -129,16 +126,6 @@ final class ConsignacaoController
         $motivoSaida = trim(
             (string) ($dadosRecebidos['motivo_saida'] ?? '')
         );
-
-        if (
-            $idUsuarioResponsavel === false ||
-            $idUsuarioResponsavel === null ||
-            $idUsuarioResponsavel <= 0
-        ) {
-            throw new InvalidArgumentException(
-                'Informe o usuário responsável pela devolução.'
-            );
-        }
 
         $this->validarData(
             $dataSaida,
@@ -157,13 +144,16 @@ final class ConsignacaoController
             );
         }
 
-        $consignacao =
-            $this->consignacao->registrarDevolucao(
-                $idConsignacao,
-                $idUsuarioResponsavel,
-                $dataSaida,
-                $motivoSaida
+        require_once __DIR__.'/../models/NotaDevolucao.php';
+        $notaSaida = NotaDevolucao::preparar($dadosRecebidos, $_FILES['arquivo'] ?? []);
+        try {
+            $consignacao = $this->consignacao->registrarDevolucao(
+                $idConsignacao, $idUsuarioResponsavel, $dataSaida, $motivoSaida, $notaSaida
             );
+        } catch (Throwable $erro) {
+            if (is_file($notaSaida['caminho'])) unlink($notaSaida['caminho']);
+            throw $erro;
+        }
 
         return [
             'sucesso' => true,
@@ -181,10 +171,7 @@ final class ConsignacaoController
             FILTER_VALIDATE_INT
         );
 
-        $idUsuarioResponsavel = filter_var(
-            $dadosRecebidos['id_usuario_responsavel'] ?? null,
-            FILTER_VALIDATE_INT
-        );
+        $idUsuarioResponsavel = (int) Auth::usuario()['id_usuario'];
 
         if (
             $idProprietario === false ||
@@ -193,16 +180,6 @@ final class ConsignacaoController
         ) {
             throw new InvalidArgumentException(
                 'Informe o proprietário do veículo.'
-            );
-        }
-
-        if (
-            $idUsuarioResponsavel === false ||
-            $idUsuarioResponsavel === null ||
-            $idUsuarioResponsavel <= 0
-        ) {
-            throw new InvalidArgumentException(
-                'Informe o usuário responsável.'
             );
         }
 
@@ -458,6 +435,7 @@ final class ConsignacaoController
         }
 
         return [
+            'confirmacao_retorno' => $dadosRecebidos['confirmacao_retorno'] ?? null,
             'id_proprietario' => (int) $idProprietario,
             'id_usuario_responsavel' =>
                 (int) $idUsuarioResponsavel,
