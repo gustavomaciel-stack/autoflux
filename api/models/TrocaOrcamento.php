@@ -127,11 +127,18 @@ final class TrocaOrcamento
         $this->pdo->beginTransaction();try{
             $o=$this->executar('SELECT * FROM orcamentos WHERE id_orcamento=? FOR UPDATE',[$id])->fetch(PDO::FETCH_ASSOC);
             if(!$o)throw new InvalidArgumentException('Orçamento não encontrado.');
-            if(!in_array($o['situacao'],['Em negociação','Aguardando aprovação','Autorizado'],true))throw new DomainException('A negociação está encerrada e permite somente consulta.');
+            $acao=$d['acao']??'';
+            $encerramento=in_array($acao,['retirar','rejeitar'],true);
+            $negociacaoAberta=in_array($o['situacao'],['Em negociação','Aguardando aprovação','Autorizado'],true);
+            // Permitir apenas o encerramento de ofertas pendentes mesmo após o
+            // vencimento/cancelamento da negociação ou encerramento do ciclo principal.
+            // Não permitir novas ofertas/avaliações nem alterar trocas já avaliadas
+            // de um orçamento encerrado (que podem integrar um pedido de venda).
+            if(!$negociacaoAberta&&!$encerramento)throw new DomainException('A negociação está encerrada e permite somente consulta ou encerramento de troca pendente.');
             // Mesmo ordenamento orçamento -> ciclo usado em reserva/cancelamento.
             $c=$this->executar('SELECT data_encerramento,situacao_atual FROM ciclos_veiculo WHERE id_ciclo=? FOR UPDATE',[$o['id_ciclo']])->fetch(PDO::FETCH_ASSOC);
-            if(!$c||$c['data_encerramento']!==null)throw new DomainException('O ciclo do veículo principal está encerrado.');
-            $acao=$d['acao']??'';
+            if(!$c)throw new DomainException('Ciclo do veículo principal não encontrado.');
+            if($c['data_encerramento']!==null&&!$encerramento)throw new DomainException('O ciclo do veículo principal está encerrado.');
             // Encerrar uma oferta não disputa o veículo nem altera a reserva existente.
             // A reserva de outra negociação continua bloqueando oferta/edição e avaliação.
             if(!in_array($acao,['retirar','rejeitar'],true)) {
@@ -146,7 +153,12 @@ final class TrocaOrcamento
             }
             elseif(in_array($acao,['retirar','rejeitar'],true)){
                 $motivo=Orcamento::texto($d['justificativa']??'',$acao==='rejeitar'?4989:5000);if($motivo==='')throw new InvalidArgumentException('Informe o motivo da retirada da oferta.');
-                $this->encerrarOferta($id,$usuario,$acao==='rejeitar'?'Rejeitada: '.$motivo:$motivo,Orcamento::id($d['id_veiculo_entrada']??null));
+                $idOferta=Orcamento::id($d['id_veiculo_entrada']??null);
+                if(!$negociacaoAberta||$c['data_encerramento']!==null){
+                    $oferta=$this->executar('SELECT situacao FROM veiculos_entrada WHERE id_orcamento=? AND id_veiculo_entrada=? AND ativo=1 FOR UPDATE',[$id,$idOferta])->fetch(PDO::FETCH_ASSOC);
+                    if(!$oferta||$oferta['situacao']!=='Avaliação pendente')throw new DomainException('Após o encerramento da negociação, somente uma oferta com avaliação pendente pode ser rejeitada ou retirada.');
+                }
+                $this->encerrarOferta($id,$usuario,$acao==='rejeitar'?'Rejeitada: '.$motivo:$motivo,$idOferta);
             }elseif($acao==='avaliar')$this->avaliar($id,$d,$usuario);
             else throw new InvalidArgumentException('Ação de troca inválida.');
             $this->pdo->commit();
